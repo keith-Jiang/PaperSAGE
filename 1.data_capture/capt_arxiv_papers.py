@@ -40,7 +40,6 @@ def scrape_arxiv_paper(arxiv_url):
 
     # 使用BeautifulSoup和lxml解析器解析HTML内容
     soup = BeautifulSoup(response.text, 'lxml')
-    print("66666")
     # --- 3. 从ArXiv页面提取信息 ---
 
     # 提取标题
@@ -57,10 +56,9 @@ def scrape_arxiv_paper(arxiv_url):
         match = re.search(r'\b(\d{4})\b', dateline_tag.text)
         if match:
             year = match.group(1)
-    print("66666")
+
     # --- 4. 调用Semantic Scholar API获取引用、作者和机构信息 ---
     # ArXiv本身不提供引用数，作者机构信息格式不统一，因此调用API是最佳选择
-    
     print(f"正在调用Semantic Scholar API获取引用、作者和机构信息...")
     api_url = f'https://api.semanticscholar.org/v1/paper/arXiv:{arxiv_id}'
     
