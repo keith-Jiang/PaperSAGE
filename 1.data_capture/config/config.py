@@ -1,0 +1,1 @@
+config={'api_key':'	sk-7bda50eca0184baf8143363b54c27d0d'}
