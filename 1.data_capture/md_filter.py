@@ -2,27 +2,22 @@ import re
 import os
 import glob
 import numpy as np
+from datetime import datetime
 from transformers import AutoTokenizer
 from prompts.summary_prompt import summary_prompt_v3
+import logging
+import sys
+
+# --- 0. 日志配置 ---
+# 设置日志
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
+                   handlers=[logging.StreamHandler(sys.stdout)])
+logger = logging.getLogger(__name__)
+
 
 def remove_unwanted_sections(markdown_content, section_titles):
     """
     从Markdown文本中移除指定的章节及其之后的所有内容。
-
-    这个函数会遍历一个章节标题列表，找到这些章节在文本中首次出现的位置，
-    并从最早出现的那个章节标题开始，删除其及之后的所有内容。
-
-    只匹配以下三种模式，且标题单词必须首字母大写：
-    1. 标题前有单个井号(#)和空格/换行: "# Acknowledgement", "# \n\n Reference"
-    2. 标题前有单个井号(#)和数字: "# 7. Acknowledgements", "# 8 Reference"
-    3. 标题前无井号: "References" (如果以行首的非井号形式出现)
-
-    参数:
-        markdown_content (str): 输入的Markdown文件内容。
-        section_titles (list): 一个包含要移除的章节标题字符串的精确列表（首字母大写）。
-
-    返回:
-        str: 移除了指定章节及其后所有内容的新Markdown内容。
     """
     cut_off_pos = len(markdown_content)
 
@@ -32,29 +27,31 @@ def remove_unwanted_sections(markdown_content, section_titles):
         match = section_pattern.search(markdown_content)
 
         if match:
-            # 找到最早出现的那个标题的位置
             if match.start() < cut_off_pos:
                 cut_off_pos = match.start()
 
-    # 如果找到了标题，则从该位置截断；否则不改变内容
     return markdown_content[:cut_off_pos].strip()
 
 
-def process_markdown_files(md_folder, pdf_folder, tokenizer_path, summary_prompt_template):
+def process_markdown_files(md_folder, pdf_folder, tokenizer_path, summary_prompt_template, print_statics=False):
     """
     处理指定文件夹中所有的Markdown文件，并删除对应的PDF。
     """
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    except Exception as e:
+        logger.error(f"加载Tokenizer '{tokenizer_path}'失败: {e}", exc_info=True)
+        return []
+        
     md_files = glob.glob(os.path.join(md_folder, "*.md"))
     
-    # 使用您指定的精确标题列表
     sections_to_remove = ["Acknowledgement", "Acknowledgements", "Reference", "References"]
     
     results = []
     token_counts = []
 
     if not md_files:
-        print(f"在文件夹 '{md_folder}' 中未找到任何Markdown文件。")
+        logger.info(f"在文件夹 '{md_folder}' 中未找到任何Markdown文件。")
         return results
         
     for md_file_path in md_files:
@@ -66,9 +63,9 @@ def process_markdown_files(md_folder, pdf_folder, tokenizer_path, summary_prompt
         if os.path.exists(pdf_to_delete):
             try:
                 os.remove(pdf_to_delete)
-                print(f"已找到并删除对应的PDF文件: {os.path.basename(pdf_to_delete)}")
+                logger.info(f"已找到并删除对应的PDF文件: {os.path.basename(pdf_to_delete)}")
             except OSError as e:
-                print(f"删除PDF文件 {os.path.basename(pdf_to_delete)} 时出错: {e}")
+                logger.error(f"删除PDF文件 {os.path.basename(pdf_to_delete)} 时出错: {e}")
         
         # --- 处理Markdown文件 ---
         try:
@@ -89,13 +86,13 @@ def process_markdown_files(md_folder, pdf_folder, tokenizer_path, summary_prompt
                 "token_count": token_count,
             })
             
-            print(f"已处理并覆盖保存 {filename} - 令牌数: {token_count}")
+            logger.info(f"已处理并覆盖保存 {filename} - 令牌数: {token_count}")
 
         except Exception as e:
-            print(f"处理文件 {filename} 时发生错误: {e}")
+            logger.error(f"处理文件 {filename} 时发生错误: {e}", exc_info=True)
 
     # 打印统计数据
-    if token_counts:
+    if token_counts and print_statics:
         token_counts_np = np.array(token_counts)
         mean = np.mean(token_counts_np)
         max_val = np.max(token_counts_np)
@@ -103,34 +100,41 @@ def process_markdown_files(md_folder, pdf_folder, tokenizer_path, summary_prompt
         std_dev = np.std(token_counts_np)
         mean_plus_3std = mean + 3 * std_dev
         
-        print("\n--- 统计信息 ---")
-        print(f"处理文件总数: {len(token_counts)}")
-        print(f"平均 Token 数: {mean:.2f}")
-        print(f"最大 Token 数: {max_val}")
-        print(f"最小 Token 数: {min_val}")
-        print(f"平均值 + 3倍标准差: {mean_plus_3std:.2f}")
+        logger.info("\n--- 统计信息 ---")
+        logger.info(f"处理文件总数: {len(token_counts)}")
+        logger.info(f"平均 Token 数: {mean:.2f}")
+        logger.info(f"最大 Token 数: {max_val}")
+        logger.info(f"最小 Token 数: {min_val}")
+        logger.info(f"平均值 + 3倍标准差: {mean_plus_3std:.2f}")
         
         outlier_count = np.sum(token_counts_np > mean_plus_3std)
-        print(f" Token 数超过 '均值+3倍标准差' 的文件数量: {outlier_count}")
+        logger.info(f" Token 数超过 '均值+3倍标准差' 的文件数量: {outlier_count}")
         if len(token_counts_np) > 0:
             proportion = outlier_count / len(token_counts_np)
-            print(f"该部分文件占比: {proportion:.2%}")
+            logger.info(f"该部分文件占比: {proportion:.2%}")
 
     return results
 
-# --- 主程序入口 ---
 if __name__ == "__main__":
-    md_folder_path = "./transferred_papers"
-    pdf_folder_path = "./origin_papers/accept-oral"
+    now = datetime.now()
+    formatted_date = now.strftime("%Y%m%d")
+    md_folder_path = f"./transferred_papers/{formatted_date}"
+    # --- 注意: 修改了此处的PDF路径，使其与前一个脚本的输出路径匹配 ---
+    pdf_folder_path = f"./origin_papers/{formatted_date}"
     tokenizer_path = "/home/zhangping/jrz-test/models/sft/Qwen/Qwen2.5-7B"
     
+    # 检查文件夹是否存在
+    if not os.path.isdir(md_folder_path):
+        logger.warning(f"Markdown文件夹 '{md_folder_path}' 不存在，程序即将退出。")
+        sys.exit(0) # 如果没有要处理的文件，直接退出
+    
     if not os.path.isdir(pdf_folder_path):
-        print(f"警告：PDF文件夹 '{pdf_folder_path}' 不存在，将跳过PDF删除步骤。")
+        logger.warning(f"PDF文件夹 '{pdf_folder_path}' 不存在，将跳过PDF删除步骤。")
     
     results = process_markdown_files(
         md_folder=md_folder_path,
         pdf_folder=pdf_folder_path,
         tokenizer_path=tokenizer_path,
-        summary_prompt_template=summary_prompt_v3
+        summary_prompt_template=summary_prompt_v3,
+        print_statics=True
     )
-

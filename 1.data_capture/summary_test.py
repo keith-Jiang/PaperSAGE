@@ -4,25 +4,27 @@ import json
 from openai import OpenAI
 from prompts.summary_prompt import summary_prompt_v1, summary_prompt_v2, summary_prompt_v3
 from config.config import config
+from dotenv import load_dotenv
 from config.config_param import config_param
+from volcenginesdkarkruntime import Ark
 import time
 
-with open("/home/zhangping/jrz-test/search_engine/1.sft_data_construction/transferred_papers/3d-denoisers-are-good-2d-teachers-molecular-pretraining-via-denoising-and-cross-modal-distillation_AAAI_2025.md", 'r', encoding='utf-8') as f:
+load_dotenv()
+DEFAULT_MODEL = os.getenv("ARK_MODEL", "deepseek-v3-250324")
+with open("/home/zhangping/jrz-test/PaperSAGE/1.data_capture/transferred_papers/20250720/3d-denoisers-are-good-2d-teachers-molecular-pretraining-via-denoising-and-cross-modal-distillation_AAAI_2025.md", 'r', encoding='utf-8') as f:
     paper = f.read()
 
 def generate_summary(prompt, paper, temper, topp, write_to_json=False, json_file_path="result.json"):
-    os.environ["DASHSCOPE_API_KEY"] = config["api_key"]
-    client = OpenAI(
-        api_key=os.getenv("DASHSCOPE_API_KEY"),
-        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-    )
+    ark_key = os.getenv("ARK_API_KEY")
+    base_url = os.getenv("ARK_API_ENDPOINT", "https://ark.cn-beijing.volces.com/api/v3/")
+    timeout=int(os.getenv("ARK_TIMEOUT", 1800))
+    client = Ark(api_key=ark_key, base_url=base_url, timeout=timeout)
 
     start_time = time.time()
     summary_prompt = prompt.format(paper=paper)
     completion = client.chat.completions.create(
-        model="qwen-turbo-2025-02-11",
+        model=DEFAULT_MODEL,
         messages=[
-            {'role': 'system', 'content': 'You are a helpful assistant.'},
             {'role': 'user', 'content': summary_prompt}
         ],
         response_format={"type": "json_object"},
