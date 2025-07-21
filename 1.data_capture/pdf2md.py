@@ -21,6 +21,7 @@ now = datetime.now()
 formatted_date = now.strftime("%Y%m%d")
 # 存放待处理 PDF 文件的文件夹路径
 INPUT_FOLDER = f"origin_papers/{formatted_date}"
+# INPUT_FOLDER = "origin_papers/accept-oral"
 # 存放解析后 Markdown 文件的文件夹路径
 OUTPUT_FOLDER = f"transferred_papers/{formatted_date}"
 # 您的 API Token
@@ -29,7 +30,7 @@ API_TOKEN = 'Bearer eyJ0eXBlIjoiSldUIiwiYWxnIjoiSFM1MTIifQ.eyJqdGkiOiI2MjQwMzE5M
 BASE_URL = 'https://mineru.net/api/v4'
 POLLING_INTERVAL = 10  # 每 10 秒查询一次状态
 # 并行下载和处理的最大线程数
-MAX_DOWNLOAD_WORKERS = 8 
+MAX_DOWNLOAD_WORKERS = 4
 
 
 def download_and_save_single_file(task):

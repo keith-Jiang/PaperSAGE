@@ -14,6 +14,17 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
                    handlers=[logging.StreamHandler(sys.stdout)])
 logger = logging.getLogger(__name__)
 
+# --- 1. 全局配置区 ---
+now = datetime.now()
+formatted_date = now.strftime("%Y%m%d")
+# 存放待处理 PDF 文件的文件夹路径
+INPUT_FOLDER = f"origin_papers/{formatted_date}"
+# INPUT_FOLDER = "origin_papers/accept-oral"
+# 存放解析后 Markdown 文件的文件夹路径
+# OUTPUT_FOLDER = f"transferred_papers/{formatted_date}"
+OUTPUT_FOLDER = "transferred_papers/20250720"
+TOKENIZER_PATH = "/home/zhangping/jrz-test/models/sft/Qwen/Qwen2.5-7B"
+
 
 def remove_unwanted_sections(markdown_content, section_titles):
     """
@@ -45,7 +56,7 @@ def process_markdown_files(md_folder, pdf_folder, tokenizer_path, summary_prompt
         
     md_files = glob.glob(os.path.join(md_folder, "*.md"))
     
-    sections_to_remove = ["Acknowledgement", "Acknowledgements", "Reference", "References"]
+    sections_to_remove = ["Acknowledgement", "Acknowledgements", "Reference", "References", "Acknowledgments"]
     
     results = []
     token_counts = []
@@ -91,7 +102,7 @@ def process_markdown_files(md_folder, pdf_folder, tokenizer_path, summary_prompt
         except Exception as e:
             logger.error(f"处理文件 {filename} 时发生错误: {e}", exc_info=True)
 
-    # 打印统计数据
+    # --- 打印统计数据 ---
     if token_counts and print_statics:
         token_counts_np = np.array(token_counts)
         mean = np.mean(token_counts_np)
@@ -116,25 +127,10 @@ def process_markdown_files(md_folder, pdf_folder, tokenizer_path, summary_prompt
     return results
 
 if __name__ == "__main__":
-    now = datetime.now()
-    formatted_date = now.strftime("%Y%m%d")
-    md_folder_path = f"./transferred_papers/{formatted_date}"
-    # --- 注意: 修改了此处的PDF路径，使其与前一个脚本的输出路径匹配 ---
-    pdf_folder_path = f"./origin_papers/{formatted_date}"
-    tokenizer_path = "/home/zhangping/jrz-test/models/sft/Qwen/Qwen2.5-7B"
-    
-    # 检查文件夹是否存在
-    if not os.path.isdir(md_folder_path):
-        logger.warning(f"Markdown文件夹 '{md_folder_path}' 不存在，程序即将退出。")
-        sys.exit(0) # 如果没有要处理的文件，直接退出
-    
-    if not os.path.isdir(pdf_folder_path):
-        logger.warning(f"PDF文件夹 '{pdf_folder_path}' 不存在，将跳过PDF删除步骤。")
-    
     results = process_markdown_files(
-        md_folder=md_folder_path,
-        pdf_folder=pdf_folder_path,
-        tokenizer_path=tokenizer_path,
+        md_folder=OUTPUT_FOLDER,
+        pdf_folder=INPUT_FOLDER,
+        tokenizer_path=TOKENIZER_PATH,
         summary_prompt_template=summary_prompt_v3,
         print_statics=True
     )

@@ -7,11 +7,11 @@ scoring_prompt = """
 在生成最终评分JSON前，请在你的“内心”严格遵循以下评分流程和标准：
 
 1.  **结构验证 (Structural Validation - Prerequisite):**
-    *   首先，验证输入的 `{summary_json}` 是否为一个**语法完全正确、可被直接解析**的JSON对象。
+    *   首先，验证输入的总结是否为一个**语法完全正确、可被直接解析**的JSON对象。
     *   **如果JSON格式无效，所有评分均为0，最终总分也为0，并在`overall_assessment`中明确指出“JSON结构错误，无法评估”。** 如果格式有效，则继续下一步。
 
 2.  **内容准确性评估 (Accuracy Assessment - 40分):**
-    *   将总结的每个字段与原始论文 `{paper}` 进行**逐字逐句的比较**。
+    *   将总结的每个字段与原始论文进行**逐字逐句的比较**。
     *   **核心概要 (`core_summary`):** 问题定义、方法概述、主要贡献中的**所有数据和声明**（如准确率提升X%，速度快Y倍）是否与原文完全一致？(满分15)
     *   **算法详解 (`algorithm_details`):** 对核心思想、创新点、实现步骤的描述是否**忠实于原文**，没有歪曲或主观臆断？(满分15)
     *   **对比分析 (`comparative_analysis`):** 基线模型列表是否正确？性能对比中的**所有数值**是否精确无误地从原文中提取？(满分10)
@@ -46,6 +46,8 @@ scoring_prompt = """
 # Output Rules
 1.  **最终输出必须且只能是一个JSON对象。**
 2.  **禁止在JSON对象前后添加任何解释性文字。**
+3.  **final_score一定为所有分数的加和**
+4.  **请再次记住要求，严格按照Core Workflow: Structured Scoring Rubric进行。**
 
 ## JSON Schema for Scoring Report
 ```json
