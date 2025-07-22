@@ -1,0 +1,199 @@
+# Quality over Quantity: Boosting Data Efficiency Through Ensembled Multimodal Data Curation
+
+Jinda $\mathbf { X } \mathbf { u } ^ { 1 * }$ , Yuhao $\mathbf { S o n g ^ { 2 * } }$ , Daming Wang2, Weiwei Zhao1, Minghua Chen2, Kangliang Chen2†, Qinya $\mathbf { L i } ^ { \sharp }$
+
+1Shanghai Key Laboratory of Scalable Computing and Systems, Shanghai Jiao Tong University 2HAOMO.AI Technology Co., Ltd. daidan2502 $@$ sjtu.edu.cn, {songyuhao, wangdaming}@haomo.ai, zhaoweiwei $@$ sjtu.edu.cn, {chenminghua, chenkangliang} $@$ haomo.ai, qinyali $@$ sjtu.edu.cn
+
+# Abstract
+
+In an era overwhelmed by vast amounts of data, the effective curation of web-crawl datasets is essential for optimizing model performance. This paper tackles the challenges associated with the unstructured and heterogeneous nature of such datasets. Traditional heuristic curation methods often inadequately capture complex features, resulting in biases and the exclusion of relevant data. We introduce an advanced, learning-driven approach, Ensemble Curation Of DAta ThroUgh Multimodal Operators (EcoDatum), incorporating a novel quality-guided deduplication method to ensure balanced feature distributions. EcoDatum strategically integrates various unimodal and multimodal data curation operators within a weak supervision ensemble framework, utilizing automated optimization to score each data point effectively. EcoDatum, which significantly improves the data curation quality and efficiency, outperforms existing state-of-theart (SOTA) techniques, ranked $1 ^ { \mathrm { s t } }$ on the DataComp leaderboard, with an average performance score of 0.182 across 38 diverse evaluation datasets. This represents a $28 \%$ improvement over the DataComp baseline method, demonstrating its effectiveness in improving dataset curation and model training efficiency.
+
+EcoDatum EcoDatum Score:0.997 Score:0.988 A yung ldy rgigae Boxer dg a siars Score:0.530 Score:0.612 You can do these image 2 of Stratton all at home! Wood Windowpane Wall Decor EcoDatum EcoDatum Humor in het Frans IMG_8822 Hahahals Museum 3
+
+# Introduction
+
+The vast amount of data presents opportunities for training advanced deep learning models, but it also introduces significant noise and irrelevant information, which can hinder model effectiveness. In both academia and industry, the need for robust data curation techniques to extract meaningful signals from extensive digital information has become a pressing concern. In web-crawled datasets, data curation is a multi-faceted task involving various stages and methodologies. The core objective is to identify and retain high-quality samples while discarding noise or mitigating the impact of irrelevant data (Hoffmann et al. 2022). This process is crucial for optimizing model performance in the deep learning framework.
+
+Web-crawled data is inherently unstructured, diverse, and constantly evolving, making it essential to develop adaptive curation methods capable of handling such complexity(Hoffmann et al. 2022). Traditionally, data curation methods have relied heavily on heuristic filtering approaches based on manually defined content attributes, such as image resolution, graphic geometry, textual length, and linguistic complexity. While these heuristic methods provide a basic means of recognizing low-quality samples, they fail to adequately capture the subtle features of web-crawled data and may introduce biases or overlook relevant information (Mindermann et al. 2022; Maini, Yaghini, and Papernot 2021). To address these limitations, researchers are increasingly adopting automated curation methods that leverage deep learning techniques, including natural language processing, computer vision and cross-modal representation learning, to achieve a balance of quality and quantity.(Schuhmann et al. 2021; Brown 2020; Torkashvand, Jameii, and Reza 2023).
+
+This research proposes a data curation framework called EcoDatum to address the aforementioned issues. Specifically, we implement a range of efficient data curation strategies as operators, to enhance the data curation process and to achieve cross-modal data alignment at various levels of granularity, as detailed in Figure 1. However, a simple combination of these operators may introduce bias and lead to insufficient utilization of their individual strengths. To fully capture their synergies, we develop a weak supervision ensemble framework that integrates these operators, achieving a synergistic effect. Furthermore, to enhance the integration efficiency of unimodal and multimodal operators, EcoDatum introduces an automated optimization approach. This is achieved by tuning the weak supervision integration module using a composite metric and a tiny-labeled dataset.
+
+As a novel weak supervision-based framework for multimodal data curation, EcoDatum achieves state-of-the-art performance on the DataComp data filtering track(Gadre et al. 2024). The visual language model trained on curated data demonstrates outstanding results over 38 downstream tasks, highlighting its strong generalizability. Extended experiments demonstrate the effectiveness of this research in understanding various operators in cross-modal data management, offering insights for future work.
+
+Our main contributions are as follows:
+
+1. We propose an auto-optimized ensemble framework, EcoDatum, which integrates techniques to enhance data quality and curate multimodal data, ensuring aligned, high-quality inputs for visual language pretraining.   
+2. We introduce a search-based optimization algorithm for weak supervision labeling function tuning that enhances the curation process and boosts the system’s robustness.   
+3. EcoDatum surpasses existing state-of-the-art techniques in the DataComp benchmark over 38 downstream tasks and ranks $1 ^ { \mathrm { s t } }$ on the leaderboard1.
+
+# Related Work
+
+# Data Curation for Web-crawled Datasets
+
+Recent research underscores the critical role of data curation in enhancing model performance with large-scale image-text datasets. Various studies focus on improving dataset quality through curation methods, such as enhancing the descriptiveness and cross-modal feature alignment of imagetext pairs, and reducing redundancy (Radenovic et al. 2023; Nguyen et al. 2024; Abbas et al. 2023).
+
+In a broader context, DataComp is a benchmark designed to evaluate the performance of multimodal models on largescale, real-world datasets(Gadre et al. 2023). Recent advancements in the DataComp benchmark highlight notable progress in data curation techniques. Yokoo et al.(Yokoo et al. 2023) advanced data filtering using image-text similarity and caption modification, achieving notable progress in the Filtering and Bring Your Own Data (BYOD) Tracks. Yu et al.(Yu et al. 2023) evaluated data selection criteria’s impact on model performance, while Chen et al.(Chen et al. 2024) introduced DataJuicer for managing large-scale datasets. Nguyen et al.(Nguyen et al. 2024) enhanced image captioning for better modality alignment, and Maini et al.(Maini et al. 2023) presented T-MARS for improved visual representation by bypassing text feature learning. Additionally, significant contributions have been made in the areas of synthetic data, contrastive learning, image-text alignment, and few-shot learning(Chen et al. 2020; Radford et al. 2021; Jia et al. 2021; Li et al. 2022; Alayrac et al. 2022).
+
+Despite the significant advancements in data curation achieved by Radenovic et al.(Radenovic et al. 2023) and Nguyen et al.(Nguyen et al. 2024) through enhancing data relevance, existing automated filtering methods may still exclude valuable but less conventional data points or introduce biases by focusing too narrowly on specific aspects, potentially overlooking broader contextual information.
+
+# Ensemble Learning
+
+Ensemble learning, which combines multiple models to improve performance and generalization, has long been a foundational approach in machine learning. Classic methods such as Bagging(Breiman 1996) and Boosting (Freund and Schapire 1997) initially demonstrated how model aggregation could reduce variance and improve accuracy.
+
+Afterwards, ensemble learning has been increasingly applied to specialized tasks. Zimek, Schubert, & Kriegel (Zimek, Schubert, and Kriegel 2012) highlighted how ensemble methods enhance outlier detection by aggregating results from multiple models. Beluch et al.(Beluch et al. 2018) demonstrated that ensemble-based uncertainty sampling can significantly improve efficiency in active learning. Rasmus et al. (Rasmus et al. 2015) demonstrated that ensemble techniques enhance semi-supervised learning by effectively utilizing both labeled and unlabeled data. Song et al.(Song et al. 2022) used ensemble methods to improve data quality by detecting and filtering noisy or mislabeled data.
+
+These advancements illustrate how ensemble techniques refine data preprocessing and improve model inputs.
+
+# Method
+
+# Overview
+
+As illustrated in Figure 2, EcoDatum enhances the pretraining effectiveness of multimodal models like CLIP(Radford et al. 2021) by strategically selecting high-quality subset $\hat { S }$ from the original dataset $S$ . This targeted data curation improves the model’s zero-shot performance on diverse tasks. The framework utilizes an ensemble of specialized data operators for comprehensive quality assessment, which addresses various dimensions including image filtering, text analysis, and cross-modal alignment at multiple granular levels. Automated optimization enables the weak supervision system to generate quality scores for data samples, thus minimizing manual input and enhancing the precision of threshold settings. Consequently, EcoDatum streamlines the data curation process and significantly elevates the quality, ensuring the dataset meets the rigorous requirements for model training.
+
+RAW Dataset EcoDatum Modality Curation Operators Ensemble Module n Score:0.891 (12.8M Image-Text Pairs) Unimodal--Text-based Operators 0.336 0.216 A person walking 1 Language Id. Operator ICC Model 0.998 0.521 their dog on the beach ® Quality-guided Operators LF1（x) LF2(x） 一 Deduplication Unimodal -- Image-based Operators Inf. Results Labeling heytA gg Trext Dedupliaian Ae co A pair of zebra standing Multimodal-- Local Alignment Operator Weak Supervision PEIGOER htheringiefmokeo GroundingDINO Model Label Matrix LabelModel IMG.9123 fight Interior wildfires.
+
+# Quality Guided Deduplication
+
+To improve our dataset’s diversity and distribution, we employ a quality-guided deduplication process that removes redundant text-image pairs. This approach uses perceptual hashing (Farid 2021) to generate hash codes, identifying duplicates based on visual and textual content. Subsequently, the CLIP model assesses the semantic coherence of each duplicate group, allowing us to retain text-image pairs with the highest CLIP scores, as shown in Figure 3. This selective retention enhances the dataset by preserving the most relevant and semantically rich examples, minimizing redundancy while maintaining quality and diversity.
+
+![](images/bf79a59979fe7908305686b4b96c7767a3be6970d9699552d5856c31a5a9dc0e.jpg)  
+Figure 2: Overview of the EcoDatum Framework. EcoDatum utilizes quality-guided deduplication along with an ensemble of unimodal and multimodal data curation operators, that strategically curate multimodal datasets. This integrated approach systematically scores each data point, ensuring optimal quality and alignment for effective visual-language pretraining.   
+Figure 3: Quality Guided Deduplication retains the samples with better cross-modal alignment in duplicate groups to enhance the overall quality and achieve optimal data distributions.
+
+# Unimodal and Multimodal Curation Operators
+
+EcoDatum enhances the quality of multimodal datasets by implementing rigorous unimodal and multimodal curation operators. The unimodal curation operators systematically filter out low-quality visuals and evaluate textual data for concreteness and relevance using both language identification and Image Caption Concreteness (ICC) metric (Yanuka et al. 2024). Multimodal curation integrates these approaches with advanced alignment techniques, employing models like GroundingDINO, an advanced open-set object detector (Liu et al. 2023) for precise local feature alignment and the CLIP model, for global semantic coherence. Together, these strategies ensure the curated dataset is of high quality, with well-aligned multimodal content.
+
+Unimodal Curation Operators. For images, the specific heuristic operators filter out blurred and low-quality visuals. For texts, the FastText (Joulin et al. 2016) model identifies the language and the ICC metric evaluates the relevance and clarity of textual data using a pre-trained autoencoder.
+
+Image-based quality filtering. Low-quality images can severely impact the learning of visual semantics. Our unimodal operators, based on heuristic rules, enhance dataset quality by filtering out images with detrimental attributes. The Geometric Operator targets images with non-standard aspect ratios that distort geometric relationships and compromise visual integrity when resized. Additionally, the DataComp dataset contains many intentionally blurred images to meet privacy standards, which reduces the visual detail crucial for effective model training. The Blurry Operator identifies and removes these excessively blurred images, ensuring that the curated dataset retains high visual quality.
+
+Text-based caption assessment. We leverage the FastText model to identify and remove captions in rare languages, enhancing the linguistic consistency of our dataset. Additionally, we use the ICC metric, developed by a pre-trained autoencoder, to independently assess and filter captions. EcoDatum ensures the dataset retains only concrete and relevant captions, directly corresponding to their images.
+
+Multimodal Curation Operators. EcoDatum enhances multimodal data curation by integrating both global and local image-text features, as shown in Figure 4. We employ GroundingDINO for precise local feature alignment, ensuring detailed correspondence between text and images at the object level. Additionally, we utilize the CLIP model, augmented with innovative adaptations, to maintain global semantic coherence throughout the dataset.
+
+Local Cross-Modal Feature Alignment. We utilize GroundingDINO for the precise alignment of text descriptions with corresponding visual content. It integrates and analyzes text and visual data, effectively identifying relevant phrases in captions and accurately localizing associated visual elements within images, ensuring precise text-to-image alignment without prompt modification.
+
+To quantitatively assess the alignment between text and images, we develop a metric based on the count of bounding
+
+GroundingDINO Original Image Detection Results Correponding Image Sausage pizza being cut with traditonal scissors Description on table being cut by woman Reklamni fotografie CLIP Image CLIPText Encoder Vertical Flipped / Horizontal Flipped Encoder /Original Image Cosine Similarity Score
+
+boxes with confidence scores exceeding a predefined threshold, as shown in Eq (1). This metric serves to highlight the degree of correspondence between textual descriptions and visual representations. A higher count of accurate detections indicates richer, more detailed scenes, signifying that these data points are of higher value for training and subsequent applications. Data points that do not meet this threshold can be effectively filtered out, including those where the described objects do not visually correspond to the images or where the textual descriptions are insufficiently specific. This ensures our dataset excludes mismatches and generalities, retaining only high-quality, relevant multimodal content.
+
+$$
+C o u n t _ { \mathrm { G r o u n d i n g D I N O } } = \sum _ { i = 1 } ^ { n } \left\{ \mathbf { x _ { i } } > \mathbf { t } \right\}
+$$
+
+where $x _ { i }$ represents the confidence score of the $i$ -th detected object, $n$ represents the total number of objects detected, and $t$ represents the predefined threshold.
+
+This operator enhances the ability to curate multimodal data effectively, ensuring that the dataset maintains the most relevant and accurately aligned text-image pairs locally.
+
+Global Cross-Modal Feature Alignment. In this module, EcoDatum utilizes the CLIP model, celebrated for its ability to assess the global semantic similarity between text descriptions and their visual counterparts. However, the effectiveness of the CLIP-Score can be compromised when images contain textual content that overlaps with captions. This issue is observed in $40 \%$ of the LAION dataset(Schuhmann et al. 2022) and $20 \%$ of the Datacomp dataset (Maini et al. 2023). To mitigate this, we implement an innovative adaptation known as Flip-CLIP, which includes Horizontal-CLIP (H-CLIP) and Vertical-CLIP (V-CLIP) techniques, inspired by (Yu et al. 2023). Before computing the CLIP scores, images are flipped horizontally or vertically, reducing the model’s bias towards text-based features and enabling more equitable evaluations of purely visual elements. The development of Flip-CLIP is motivated by the observation that OCR tasks often disproportionately influence the standard
+
+CLIP score, especially when the image-text is overlapped.
+
+By integrating both CLIP-Score and Flip-CLIP-Score, we foster the model’s ability to learn from visual content independently of textual influences, thereby enhancing EcoDatum’s capability to process and understand global visual features without excessive bias towards textual elements.
+
+# Modality Operators Ensemble
+
+Given the vast volume of data and the high cost associated with obtaining high-quality labeled data, the availability of reliable labels is often limited. EcoDatum introduces a weak supervision labeling system that allows the efficient generation of quality-indicated labels at scale, mitigating the challenges of data scarcity and ensuring a more robust data quality assessment. In this study, data curation is abstracted as a data quality discrimination task, aiming to identify “highquality” data. This ensemble-based system further enhances the capabilities of the data operators described above.
+
+Specifically, EcoDatum employs a weak supervision ensemble model called LabelModel (Ratner et al. 2017; Bach et al. 2019) into the scope of data curation research, which integrates signal sources abstracted from unimodal and multimodal operators for data quality evaluation. This integration balances the limitations of individual operators and significantly reduces their erroneous impacts.
+
+Each operator serves as an independent weak supervision signal source, assessing data quality from its unique dimension. The integration approach in this work uses LabelModel to combine multiple operators, automatically inferring a data quality score for each data sample by modeling the accuracy and relationships of these operators.
+
+This process begins by matching each operator with corresponding labeling functions (LFs) (Ratner et al. 2017), which converts the operator’s inferred score $s$ of the data sample $x _ { i }$ into weak supervision label $L$ , as shown in Eq (2). The LFs compute operators’ inference results with the mean value $b$ and the standard deviation $\beta$ of the decision boundary to transform continuous scores into discrete labels. These labels are then aggregated to form a comprehensive weak supervision label matrix. In this context, weak supervision labeling with “Abstain” addresses situations where LFs face unclear features or inapplicable rules. Allowing the LabelModel to abstain from assigning labels in these cases prevents the generation of incorrect labels. This approach enhances the LabelModel’s ability to integrate diverse LFs by learning transformed matrix, particularly when they exhibit different biases and error patterns, thereby increasing the model’s robustness when handling heterogeneous data.
+
+$$
+L _ { x _ { i } j } = \left\{ \begin{array} { l l } { 1 , } & { \mathrm { i f ~ } s _ { x _ { i } j } \geq b _ { j } + \beta _ { j } \quad \mathrm { ( S e l e c t e d ) } } \\ { 0 , } & { \mathrm { i f ~ } s _ { x _ { i } j } \leq b _ { j } - \beta _ { j } \quad \mathrm { ( F i l t e r e d ) } } \\ { - 1 , } & { \mathrm { i f ~ } b _ { j } - \beta _ { j } < s _ { x _ { i } j } < b _ { j } + \beta _ { j } \quad \mathrm { ( A b s t a i n ) } } \end{array} \right.
+$$
+
+The LabelModel learns the transformed weak supervision label matrix $L _ { M }$ , estimating the weight $w _ { j }$ for each LF. These weights are used to combine the outputs of all LFs, ultimately generating a score for each data sample, which determines whether it is retained or filtered out. This
+
+LFs Combination_i LabelModel Metric $_ 1 = 1 . 4 3$ for LFs Combination_ LF1 Transformations, Evaluation Metric $_ 2 = 1 . 9 8$ for LFs Combination_2 $L F _ { 2 }$ LF3 Metric3 $= 2 . 4 1$ for LFs Combination_ Raw Data Operators' Weak Supervision Label Matrix Metric $_ 4 = 0 . 7 8$ for LFs Combination_ Parallel Score Matrix LFn Iteratively Updating Candidate LFs Tiny-Labeled Evaluation Dataset (\~10w Image-Text Pairs with Labels) Rank by Metrics globalFiltered,Selected,Abstain=, def $\mathsf { L F } _ { 1 } ( \mathsf { x } , \mathsf { B } _ { 1 } , \mathsf { B e } \mathsf { t } \mathsf { a } _ { 1 } ) ;$ return Seleted def LFf $x > = B _ { n } + B e + a _ { n } \cdot$ return Selected Abcycl wit wheel Man.png elif $x < = B _ { 1 }$ -Betal:return Filtered elif $x < = B _ { n } - B e + a _ { n } ;$ return Filtered A bathroom with O W.G. 96 Best LFs Combination' else: return Abstain else: return Abstain baby blue wall Metric $= 2 . 4 1$ Candidate LFs Collected From Operators Score Distribution Statistics
+
+approach enhances the comprehensiveness and robustness of data quality evaluation, which ultimately allows the LabelModel to score all raw data and reflect quality.
+
+# Search-based Optimization
+
+A novel search-based optimization method is introduced to enhance the design of LFs, improving the generation of a more accurate weak supervision label matrix for LabelModel modeling, as shown in Figure 5. This method addresses the challenge of converting operator-derived scores into labels by automatically optimizing LFs, reducing the need for manual experimentation. To further optimize the performance of the ensemble, EcoDatum proposes a composite metric that integrates the LabelModel’s data quality assessment capability with the attributes of LFs combination from the transformation steps, enabling a refined weak supervision label matrix. This approach enhances the LabelModel’s ability to analyze operator interrelations and importance, producing quality scores for data samples that closely approximate the ideal.
+
+The evaluation stage automatically constructs a small labeled dataset containing “clean” and “noisy” samples. Clean data, labeled “1”, are sourced from the COCO dataset(Lin et al. 2014), while “noisy” samples, labeled $\ " 0 \cdot \bf { \dot { \sigma } }$ , are randomly sampled from the DataComp dataset to introduce both unimodal and multimodal noise and include added cross-modal noise through image-text pair exchanges. This setup tests the LabelModel’s ability to differentiate data quality via the F1-tiny scores in Eq (3). Importantly, this dataset is only used for assessing the LabelModel’s performance and does not contribute to training the model or optimizing Eq (3) coefficients, ensuring unbiased validation of the LF effectiveness.
+
+To evaluate the data quality discrimination capacity of the LabelModel after learning generated weak supervision label matrics with different combinations of LFs, this research develops a specialized composite metric, shown in Eq (3), which combines classification metrics against ground
+
+1: Input: 2: Raw dataset Draw, Tiny-labeled dataset Dtiny, Operator $O p$ , Evaluation metrics $M$ , Candidate LF Combinations $L F s C o m b s$ , 3: Output: 4: Optimal LF sComb 5: Initialize $M ^ { * }$ 6: for each $L F s \in L F s C o m b s \{$ do 7: Convert weak supervision label matrix $L _ { M }$ from $L F s$ 8: Train LabelModel on $L _ { M }$ 9: Predict and evaluate LabelModel on Dtiny 10: if $M ( L F s ) > M ^ { * }$ then 11: Update ${ \cal M } ^ { * } \gets { \cal M } ( L F s )$ and $L F s ^ { * } \gets L F s$ 12: end if 13: end for 14: return ${ \ L F s ^ { * } }$
+
+truth and further incorporates the attributes of each operators’ LFs, specifically measuring the fOverlap, $f _ { \mathrm { C o n f l i c t } }$ , and fCoverage. Here, they respectively indicate the frequency of agreement among LFs, the extent of disagreements, and the proportion of data labeled by at least one function.
+
+$$
+M = \alpha _ { 1 } \cdot F 1 _ { \mathrm { t i n y } } + \alpha _ { 2 } \cdot f _ { \mathrm { O v e r l a p } } - \alpha _ { 3 } \cdot f _ { \mathrm { C o n f i c t } } + \alpha _ { 4 } \cdot f _ { \mathrm { C o v e r a g e } }
+$$
+
+Here, $\alpha _ { 1 } , \alpha _ { 2 } , \alpha _ { 3 } , \alpha _ { 4 }$ are coefficients that are determined through a few rounds of experiments. These coefficients are tuned to optimize the balance between classification performance on the tiny labeled dataset and the contributions from overlap, conflict, and coverage metrics within the weak supervision labeling framework.
+
+$$
+f _ { \mathrm { O v e r l a p } } = \frac { 1 } { n } \sum _ { i = 1 } ^ { n } \mathbb { I } \left( \sum _ { j = 1 } ^ { m } \mathbb { I } ( L F _ { j } ( x _ { i } ) \neq 0 ) > 1 \right)
+$$
+
+$$
+f _ { \mathrm { C o n f i c t } } = \frac { 1 } { n } \sum _ { i = 1 } ^ { n } \mathbb { I } \left( \exists j _ { 1 } \neq j _ { 2 } , L F _ { j _ { 1 } } ( x _ { i } ) \neq L F _ { j _ { 2 } } ( x _ { i } ) \neq 0 \right)
+$$
+
+$$
+f _ { \mathrm { C o v e r a g e } } = \frac { 1 } { n } \sum _ { i = 1 } ^ { n } \mathbb { I } \left( \sum _ { j = 1 } ^ { m } \mathbb { I } ( L F _ { j } ( x _ { i } ) \neq 0 ) \ge 1 \right)
+$$
+
+These metrics capture the model’s effectiveness in integrating weak supervision signals. For example, even if the model achieves a high F1-score $F 1 _ { t i n y }$ on a tiny labeled dataset, significant conflicts between LFs or low coverage might still lead to instability in real-world applications. By optimizing these composite metrics, we can enhance the model’s generalization ability across different datasets.
+
+The overall optimization process involves repeatedly constructing the LabelModel across candidate LFs combinations and using the results of the aforementioned composite metrics to identify the optimal LabelModel leaned by each weak supervision label matrix, as shown in Algorithm 1. This optimized model is then applied to the final data curation task. By employing the optimized LabelModel, the overall framework can maximize the robustness of data quality assessment, balance the limitations of individual operators, and ultimately enhance overall data efficiency.
+
+# Experiments
+
+# Dataset and Benchmark
+
+The DataComp benchmark uniquely emphasizes data curation over model development. Unlike typical machine learning competitions that seek the best model with a fixed dataset, DataComp challenges participants to curate optimal datasets using fixed training code. This highlights the crucial role of high-quality, well-curated data in enhancing model performance. We choose the small-scale filtering track to validate the proposed framework EcoDatum, we curate a subset from a vast pool of 12.8 million image-text pairs from Common Crawl, adhering to the competition’s constraints of fixed training parameters and computational budgets. Our objective is to efficiently filter this dataset, ensuring consistency in training iterations regardless of dataset size.
+
+The effectiveness of our curated dataset is evaluated across 38 diverse datasets, including ImageNet, 6 ImageNet distribution shift datasets, 12 datasets from the Visual Task Adaptation Benchmark, three retrieval datasets, and several others(Gadre et al. 2024). This extensive range of evaluation datasets tested the generalizability and robustness of EcoDatum, providing a comprehensive assessment of their impact on model training across various real-world scenarios.
+
+# Implementation Details
+
+For the local cross-modal curation operator, we employ the GroundingDINO-based model(Liu et al. 2025) with SwinLarge as the image backbone and BERT-Base (Devlin 2018)
+
+for encoding text, setting confidence thresholds at 0.1 to retain more potentially feature-aligned data. In global crossmodal curation, we use the CLIP-ViT-Large-14 architecture(Radford et al. 2021). In determining final data volume, we conducted extensive experiments and reviewed related works, concluding that approximately the top $40 \%$ samples by the EcoDatum quality score after deduplication (around 3.5M) provide the best balance between quality and quantity. Experiments utilized 8 NVIDIA A100 GPUs, The training and evaluation process required 2.5 hours. Data curation for the 12.8 million dataset involved approximately 10 hours.
+
+# Result Analysis
+
+Existing Baselines. Several SOTA methods have previously set benchmarks in data filtering. LAION and CLIP Score utilize the CLIP model to refine datasets, while Datacomp Filtering employs heuristic unimodal operators for targeted data refinement (Gadre et al. 2023). The HYPerbolic Entailment (HYPE) Filtering technique(Kim et al. 2024) enhances data quality by integrating unimodal specificity with crossmodal alignment. LINE’s strategy leverages large models for web data curation (Yokoo et al. 2023). The TextMasking and Re-Scoring (T-MARS) method corrects imbalances where textual features overpower visual ones (Maini et al. 2023), and the University of Wisconsin-Madison’s (WS) approach utilizes an ensemble of object detection methods to optimize data filtering (Huang et al. 2024).
+
+Performance Comparison. Building upon these foundations, EcoDatum enhances both efficiency and model training outcomes. As outlined in Table 1, using only $3 . 5 \ \mathrm { m i l } \cdot$ - lion data pairs from the original 12.8 million, EcoDatum achieved the highest average score of 0.182. This surpasses the performance of established methods like T-MARS and WS, both of which scored 0.180 across 38 diverse evaluation datasets. This curation strategy not only reduces computational overhead by $72 \%$ but also significantly improves data quality. EcoDatum exceeds the “No Filtering” baseline score of 0.132 and the Datacomp Basic filtering score of 0.142 by $28 \%$ . The integration of advanced methodologies like our optimized LabelModel for labeling functions tuning further refines the data curation process, setting new benchmarks in multimodal applications. The empirical results robustly validate our hypothesis that smaller, wellcurated datasets can outperform larger, unfiltered datasets, underscoring the effectiveness of EcoDatum. Moreover, additional experiments show that EcoDatum consistently improves performance and scales effectively with increasing dataset size.
+
+In this study, we introduce a composite metric designed to automatically optimize the generation of labeling functions (LFs), thereby facilitating the creation of a more accurate weak supervision label matrix. This optimization directly enhances the learning efficiency of the LabelModel, significantly improving its ability to assess data quality. To validate the effectiveness of this composite metric, we conducted a rigorous experimental case study. The process involved documenting a systematic search to identify the most effective LF combinations and repeatedly evaluating their impact on the average performance across a diverse set of 38 benchmark tasks. The results, depicted in Figure 6, demonstrate a consistent positive correlation between the composite metric scores and the model’s performance, affirming the metric’s utility in refining the data curation process.
+
+<html><body><table><tr><td></td><td>No Filtering</td><td>LAION</td><td>Datacomp</td><td>CLIP</td><td>HYPE</td><td>LINE</td><td>T-MARS</td><td>WS</td><td>Ours</td></tr><tr><td>Dataset Size</td><td>12.8M</td><td>1.3M</td><td>3M</td><td>3.8M</td><td>2.3M</td><td>4.5M</td><td>2.3M</td><td>4.1M</td><td>3.5M</td></tr><tr><td>Avg. Perf.</td><td>0.132</td><td>0.133</td><td>0.142</td><td>0.173</td><td>0.176</td><td>0.177</td><td>0.180</td><td>0.180</td><td>0.182</td></tr></table></body></html>
+
+Table 1: Performance comparison between our method, the Datacomp baseline, and other participants’ approaches.
+
+# Ablation Study
+
+This experiment conducts a systematic evaluation of data filtering techniques to assess impacts on the performance of the deep learning model, as detailed in Table 2. The “No Filtering” condition acts as the control group.“Random Deduplication” utilizes a stochastic method to eliminate duplicates, indicating that even indiscriminate reductions can improve model performance by balancing feature distribution.
+
+Table 2: Performance comparison of different data curation and ensemble techniques over 38 downtasks.   
+Composite Metric vs.Avg.Perf. Over 38 Tasks   
+
+<html><body><table><tr><td>Methods</td><td>Dataset Size Avg.Perf.</td></tr><tr><td>No Filtering 12.8M</td><td>0.132</td></tr><tr><td>Random Dedup.</td><td>8.8M 0.145</td></tr><tr><td>Quality-Guided Dedup.(QGD)</td><td>8.8M 0.147</td></tr><tr><td>QGD+Ens.(Uni.)</td><td>3.5M 0.154</td></tr><tr><td>QGD+Ens.(Mul.)</td><td>3.5M 0.164</td></tr><tr><td>QGD+Ens.(Uni.&Global-Mul.)</td><td>3.5M 0.168</td></tr><tr><td>QGD+Ens.(Uni.&Local-Mul.)</td><td>3.5M 0.155</td></tr><tr><td>Best Perf.</td><td></td></tr><tr><td>QGD+Ens.(Uni.&Mul.)</td><td>3.5M 0.182</td></tr></table></body></html>
+
+The introduction of QGD achieves a $1 . 4 \%$ improvement over the random method with the same dataset size. Incorporating a unimodal operators’ ensemble within the QGD framework results in a $4 . 8 \%$ improvement, while a multimodal operators’ ensemble leads to a more substantial $9 . 5 \%$ enhancement. These results highlight the efficacy of both unimodal and multimodal operator ensembles in data curation. By integrating QGD with both unimodal and multimodal ensembles, the combined approach outperforms all others, showing a $4 5 . 4 \%$ improvement in performance compared to the “No Filtering” baseline. These experiments illustrate that EcoDatum strategically integrates advanced deduplication techniques and sophisticated ensemble frameworks to markedly elevate data quality, optimizing the pretraining process for multimodal models.
+
+We conduct another ablation study to assess the individual contributions of data processing operators in data curation. By applying each operator independently and incrementally adding them, we explored their impact on downstream tasks. This approach allowed us to identify the most effective combinations of operators, significantly streamlining the optimization process. Through meticulous integration and refinement of labeling function (LF) constructions, we determined the most efficient operator combinations, thereby enhancing the accuracy and efficacy of our data curation methods. This conclusion suggests a strategic approach when dealing with massive web data and limited computational resources: focusing on alignment techniques can lead to more efficient data filtering. Such a focus can improve the generalization performance of multimodal models. Potentially, this experiment could pave the way for future research, indicating that more advanced image-text matching techniques might result in even better multimodal curation outcomes.
+
+![](images/79793228fc4eb9f08d1a13997f1ebb034efcff2c1e4dd97a1bc0a3f7b1039a9f.jpg)  
+Figure 6: Composite Metric Validation with Repeated Experimental Downtasks Evaluations. The positive correlation indicates its capability to guide the tuning of the process.
+
+# Conclusion and Future Work
+
+The volume of web-crawled datasets is rapidly expanding, and training multimodal models with such data are increasingly prevalent. This paper addresses the challenge of variable sample quality in web-crawled datasets by introducing a novel data curation framework, EcoDatum, designed to select high-quality data. EcoDatum begins with quality-guided deduplication to preprocess the data, followed by the integration of unimodal and multimodal operators into a weak supervision ensemble model, LabelModel, and have employed a search-based optimization method to refine the labeling matrix within LabelModel. Our experiments demonstrate robust performance across all evaluated tasks, securing a $1 ^ { \mathrm { s t } }$ place ranking in the small-scale track of the DataComp benchmark. While this study validated EcoDatum on a small dataset, future work will extend the evaluation to larger datasets. This expansion will further test the scalability of EcoDatum, aiming to solidify its effectiveness and efficiency in enhancing the training of multimodal models with diverse, large-scale web-crawled data.
+
+# Acknowledgments
+
+This work was supported in part by China NSF grant No. 62202297 and in part by the Open Project Program of the Laboratory of Pinghu. The opinions, findings, conclusions, and recommendations expressed in this paper are those of the authors and do not necessarily reflect the views of the funding agencies or the government.

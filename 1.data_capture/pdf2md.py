@@ -20,17 +20,18 @@ logger = logging.getLogger(__name__)
 now = datetime.now()
 formatted_date = now.strftime("%Y%m%d")
 # 存放待处理 PDF 文件的文件夹路径
-INPUT_FOLDER = f"origin_papers/{formatted_date}"
-# INPUT_FOLDER = "origin_papers/accept-oral"
+# INPUT_FOLDER = f"origin_papers/{formatted_date}"
+INPUT_FOLDER = "origin_papers/aaai-technical-track-on-machine-learning-vi"
 # 存放解析后 Markdown 文件的文件夹路径
-OUTPUT_FOLDER = f"transferred_papers/{formatted_date}"
+# OUTPUT_FOLDER = f"transferred_papers/{formatted_date}"
+OUTPUT_FOLDER = "transferred_papers/extra_1"
 # 您的 API Token
 API_TOKEN = 'Bearer eyJ0eXBlIjoiSldUIiwiYWxnIjoiSFM1MTIifQ.eyJqdGkiOiI2MjQwMzE5MCIsInJvbCI6IlJPTEVfUkVHSVNURVIiLCJpc3MiOiJPcGVuWExhYiIsImlhdCI6MTc1Mjg0Mzc4NCwiY2xpZW50SWQiOiJsa3pkeDU3bnZ5MjJqa3BxOXgydyIsInBob25lIjoiIiwib3BlbklkIjpudWxsLCJ1dWlkIjoiMzhkZDYzMjAtNzQ3Ny00ZjhjLTgwNTYtMWE0NjliNWUyZDc4IiwiZW1haWwiOiIiLCJleHAiOjE3NTQwNTMzODR9.2MBgX_jgoq6Z6XZLcMoi7YLZuJdQ_Yb2GXRh8SA0KglP0LWQZjUOTsv-xpgrIjCNGf9nBrsyRtg9CmUjIt6g0Q'
 # API 基础 URL 和轮询间隔
 BASE_URL = 'https://mineru.net/api/v4'
 POLLING_INTERVAL = 10  # 每 10 秒查询一次状态
 # 并行下载和处理的最大线程数
-MAX_DOWNLOAD_WORKERS = 4
+MAX_DOWNLOAD_WORKERS = 6
 
 
 def download_and_save_single_file(task):
@@ -77,7 +78,8 @@ def process_pdf_files():
     Path(OUTPUT_FOLDER).mkdir(parents=True, exist_ok=True)
     api_headers = {'Content-Type': 'application/json', 'Authorization': API_TOKEN}
     pdf_files = [f for f in os.listdir(INPUT_FOLDER) if f.lower().endswith('.pdf')]
-    paper_count = min(len(pdf_files), 20)
+    num = 300
+    paper_count = min(len(pdf_files), num)
     if paper_count < len(pdf_files):
         pdf_files = random.sample(pdf_files, paper_count)
     

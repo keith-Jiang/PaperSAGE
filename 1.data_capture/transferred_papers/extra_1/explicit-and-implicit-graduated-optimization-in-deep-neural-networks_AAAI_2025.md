@@ -1,0 +1,222 @@
+# Explicit and Implicit Graduated Optimization in Deep Neural Networks
+
+Naoki Sato, Hideaki Iiduka
+
+Meiji University naoki310303@gmail.com, iiduka@cs.meiji.ac.jp
+
+# Abstract
+
+Graduated optimization is a global optimization technique that is used to minimize a multimodal nonconvex function by smoothing the objective function with noise and gradually refining the solution. This paper experimentally evaluates the performance of the explicit graduated optimization algorithm with an optimal noise scheduling derived from a previous study and discusses its limitations. The evaluation uses traditional benchmark functions and empirical loss functions for modern neural network architectures. In addition, this paper extends the implicit graduated optimization algorithm, which is based on the fact that stochastic noise in the optimization process of SGD implicitly smooths the objective function, to SGD with momentum, analyzes its convergence, and demonstrates its effectiveness through experiments on image classification tasks with ResNet architectures.
+
+Code — https://github.com/iiduka-researches/igo-aaai25
+
+# Introduction
+
+Nonconvex optimization problems are ubiquitous in the machine-learning and artificial-intelligence fields, and those arising in training deep neural networks (DNN) (Bengio 2009) are particularly interesting from multiple aspects. In particular, because the nonconvex functions that appear in DNN training have many local optimal solutions, stochastic gradient descent (SGD) (Robbins and Monro 1951) and its variants, which use gradients to update the sequence, may fall into local optimal solutions and may not minimize losses sufficiently.
+
+Graduated optimization (Blake and Zisserman 1987) is a global optimization method that can be applied to multimodal functions in order to avoid local optimal solutions and converge to the global optimal one. The method first prepares $M$ monotone decreasing noises $( \delta _ { m } ) _ { m \in [ M ] }$ . Then, by smoothing the original objective function $f$ with that noise, a sequence of $M$ smoothed functions $( \hat { f } _ { \delta _ { m } } ) _ { m \in [ M ] }$ is obtained that gradually approaches the original objective function. The function $\hat { f } _ { \delta _ { 1 } }$ smoothed with the largest noise $\delta _ { 1 }$ is then optimized, and the approximate solution is used as the initial point for optimizing the function $\hat { f } _ { \delta _ { 2 } }$ smoothed with the second largest noise $\delta _ { 2 }$ . After that, the function $\hat { f } _ { \delta _ { 3 } }$ smoothed with the third largest noise $\delta _ { 3 }$ is optimized with the second approximate solution as the initial point, and the procedure is repeated in order to search for the global optimal solution without falling into a local optimal one. See Figure 1 for a conceptual diagram of this process.
+
+Graduated optimization is often used in machine learning and computer vision for, e.g., semi-supervised learning (Chapelle, Chi, and Zien 2006; Sindhwani, Keerthi, and Chapelle 2006; Chapelle, Sindhwani, and Keerthi 2008) and robust estimation (Yang et al. 2020; Antonante et al. 2022; Peng, Ku¨mmerle, and Vidal 2023). In addition, score-based generative models (Song and Ermon 2019, 2020) and diffusion models (Sohl-Dickstein et al. 2015; Ho, Jain, and Abbeel 2020; Song et al. 2021; Rombach et al. 2022), which are state-of-the-art models of image generation, use this approach.
+
+Theoretical analysis of graduated optimization began with the pioneering work by (Duchi, Bartlett, and Wainwright 2012) on nonsmooth convex functions, and several papers (Mobahi and Fisher III 2015; Hazan, Yehuda, and ShalevShwartz 2016; Iwakiri et al. 2022; Li, Wu, and Zhang 2023; Sato and Iiduka 2023) have produced important results. In particular, (Hazan, Yehuda, and Shalev-Shwartz 2016) defined a family of nonconvex functions that satisfy the conditions for convergence of a graduated optimization algorithm, called $\sigma$ -nice, and proposed a first-order algorithm based on graduated optimization. They also studied the convergence and convergence rate of the algorithm to a global optimal solution for $\sigma$ -nice functions. In addition, (Sato and Iiduka 2023) showed that the stochastic noise in the optimization process which SGD naturally has can implicitly smooth the objective function, and they proposed an implicit graduated optimization algorithm exploiting this property. Furthermore, they defined an extension of the $\sigma$ -nice function, called the new $\sigma$ -nice function, and provided a convergence analysis of the implicit graduated optimization algorithm for this function. Here, this paper refers to graduated optimization with explicit smoothing operations (see Definition 1) as “explicit graduated optimization” and to graduated optimization with implicit smoothing operations as “implicit graduated optimization”.
+
+This paper analyzes the new $\sigma$ -nice function and discusses the implicit graduated optimization algorithm, which has so far been studied in relation to stochastic noise in SGD, in relation to stochastic noise in SGD with momentum. It complements the prior studies with important theoretical and experimental validations on explicit and implicit graduated optimization.
+
+![](images/2089c05298a87da62381e4d5f8bf9d680f2754aa9acb4640fe9926d740804a93.jpg)  
+Figure 1: Conceptual diagrams of new $\sigma$ -nice function and its smoothed versions and implicit graduated optimization. Note that this is a direct quotation from the prior work (Sato and Iiduka 2023) with minor changes made to fit our results.
+
+# Contributions
+
+1. An example of a new $\sigma$ -nice function. (Sato and Iiduka 2023) proposed new $\sigma$ -nice functions, i.e., a family of nonconvex functions that satisfy the necessary conditions for analysis and convergence of graduated optimization algorithms, but did not provide an example. Here, we theoretically prove that Rastrigin’s function (To¨rn and Zilinskas 1989; Rudolph 1990), one of the traditional benchmark functions for global optimization, is a new $\sigma$ -nice function (Theorem 1).
+
+2. Experimental validation in explicit graduated optimization. (Sato and Iiduka 2023) theoretically derived the optimal decay rate of the noise in both explicit and implicit graduated optimization, but did not provide numerical experiments to determine whether it is valid for explicit graduated optimization (Algorithm 1). Here, we applied the explicit graduated optimization algorithm and general global optimization methods to traditional benchmark functions for global optimization and found that the explicit graduated optimization algorithm with the optimal noise schedule outperforms the other methods on some problems (Table 1). We also applied the explicit graduated optimization algorithm to DNNs and found that its performance is not superior to other methods (Figure 2).
+
+3. Experimental validation in implicit graduated optimization with SGD. (Sato and Iiduka 2023) proposed an implicit graduated optimization algorithm using stochastic noise in SGD (Algorithm 3), but did not provide numerical experimental results with the noise decay rate set as per theory. In this paper, we provide numerical experimental results that are consistent with theory as far as computational complexity permits, confirming that their algorithm works effectively (Figure 3).
+
+4. Theoretical development of implicit graduated optimization algorithm with SGD with momentum. On the basis that the stochastic noise of SGD is determined by the ratio of learning rate and batch size and that this noise helps to the smooth the objective function, (Sato and Iiduka 2023) proposed an algorithm that achieves implicit graduated optimization by varying those parameters during training so that the noise decreases gradually. In this paper, we extend this argument to SGD with momentum, and on the basis that the stochastic noise of SGD with momentum is determined by the learning rate, batch size, and momentum factor (Sato and Iiduka 2024), we construct an algorithm (Algorithm 6) to perform implicit graduated optimization in the same way (see Figure 1). We also analyze the algorithm’s convergence and show that it reaches an $\epsilon$ -neighborhood of the global optimal solution of the new $\sigma$ -nice function $f$ in $\bar { \mathcal { O } } \left( 1 / \epsilon ^ { \frac { 1 } { p } } \right)$ $( p \in ( 0 , 1 ] )$ rounds (Theorem 2).
+
+5. Experimental validation of implicit graduated optimization with SGD with momentum. We tested the effectiveness of the proposed algorithm by using it to train ResNet18 and WideResNet-28-10 on the CIFAR100 dataset for image classification tasks. We confirmed that the algorithm has a lower loss function value and higher test accuracy than those of vanilla SGD with momentum (Figure 4). In addition, based on the theory of optimal noise decay rate in graduated optimization, the optimal decaying learning rate for SGD with momentum was tested by training ResNet34 on the ImageNet dataset. The results confirmed that the theoretically optimal learning rate scheduler, a polynomial decay scheduler with a power less than 1, achieves the lowest loss function value (Figure 5).
+
+# Preliminaries
+
+Notation. Let $\mathbb { N }$ denote the set of non-negative integers. For $m \in \mathbb { N } \backslash \{ 0 \}$ , define $[ m ] : = \{ 1 , 2 , \dots , m \}$ . The space $\mathbb { R } ^ { d }$ is a $d$ -dimensional Euclidean space with an inner product $\langle \cdot , \cdot \rangle$ , which induces the norm $\| \cdot \|$ . The Euclidean closed ball of radius $r$ centered at $\hat { \pmb x }$ is denoted by $B ( \hat { \pmb x } ; r ) ~ : =$ $\left\{ \pmb { x } \in \mathbb { R } ^ { d } \colon \left\| \pmb { x } - \hat { \pmb { x } } \right\| \le r \right\}$ . The DNN is parameterized by a vector $\pmb { x } \in \mathbb { R } ^ { d }$ , which is optimized by minimizing the empirical loss function $\begin{array} { r } { f ( \pmb { x } ) \overset { * } { : = } \frac { 1 } { n } \sum _ { i \in [ n ] } f _ { i } ( \pmb { x } ) } \end{array}$ , where $f _ { i } ( { \pmb x } )$ is the loss function for $\pmb { x } \in \mathbb { R } ^ { d }$ and the sample $z _ { i }$ $( i \in [ n ] )$ . Let $\xi$ be a random variable independent of $\pmb { x } \in \mathbb { R } ^ { d }$ , and let $\mathbb { E } _ { \xi } [ X ]$ denote the expectation with respect to $\xi$ of a random variable $X$ . The random variable $\xi _ { t , i }$ is generated from the $i$ - th sampling at time $t$ , and $\pmb { \xi } _ { t } : = ( \xi _ { t , 1 } , \xi _ { t , 2 } , \ldots , \xi _ { t , b } )$ is independent of the sequence $( \pmb { x } _ { k } ) _ { k = 0 } ^ { t } \subset \mathbb { R } ^ { d }$ , where $b$ $( \leq n )$ represents the batch size. The independence of $\xi _ { 0 } , \xi _ { 1 } , \ldots$ allows us to define the total expectation $\mathbb { E }$ as $\mathbb { E } = \mathbb { E } _ { \pmb { \xi } _ { 0 } } \mathbb { E } _ { \pmb { \xi } _ { 1 } } \cdot \cdot \cdot \mathbb { E } _ { \pmb { \xi } _ { t } }$ . Let $\mathsf { G } _ { \pmb { \xi } _ { t } } ( \pmb { x } )$ be the stochastic gradient of $f ( \cdot )$ at $\pmb { x } \in \mathbb { R } ^ { d }$ . The mini-batch $\boldsymbol { \mathcal { S } } _ { t }$ consists of $b$ samples $z _ { i }$ at time $t$ , and the mini-batch stochastic gradient of $f ( { \pmb x } _ { t } )$ for $\boldsymbol { \mathcal { S } } _ { t }$ is defined as $\begin{array} { r } { \nabla f _ { S _ { t } } ( \pmb { x } _ { t } ) : = \frac { 1 } { b } \sum _ { i \in [ b ] } \mathsf { \bar { G } } _ { \xi _ { t , i } } ( \pmb { x } _ { t } ) } \end{array}$ .
+
+Definition 1 (Smoothed function). Given an $L _ { f }$ -Lipschitz function $f$ , define $\hat { f } _ { \delta }$ to be the function obtained by smoothing $f$ ,
+
+$$
+\hat { f } _ { \delta } ( \pmb { x } ) : = \mathbb { E } _ { \pmb { u } \sim B ( \mathbf { 0 } ; 1 ) } \left[ f ( \pmb { x } - \delta \pmb { u } ) \right] ,
+$$
+
+where $\delta \in \mathbb { R }$ represents the degree of smoothing and $\mathbf { \Delta } _ { \pmb { u } }$ is $a$ random variable distributed uniformly over $B ( \mathbf { 0 } ; 1 )$ . Also,
+
+$$
+\pmb { x } ^ { \star } : = \operatorname * { a r g m i n } _ { \pmb { x } \in \mathbb { R } ^ { d } } f ( \pmb { x } ) \ a n d \ \pmb { x } _ { \delta } ^ { \star } : = \operatorname * { a r g m i n } _ { \pmb { x } \in \mathbb { R } ^ { d } } \hat { f } _ { \delta } ( \pmb { x } ) .
+$$
+
+There are a total of $M$ smoothed functions in this paper. The largest noise level is $\delta _ { 1 }$ and the smallest is $\delta _ { M + 1 } = 0$ . Thus, $\hat { f } _ { \delta _ { M + 1 } } = f$ .
+
+Definition 2. Let $\delta _ { 1 } \in \mathbb { R }$ . A function $f \colon  { \mathbb { R } ^ { d } } \to  { \mathbb { R } }$ is said to be “new $\sigma$ -nice” if the following conditions hold :
+
+(i) For all $m \in [ M ]$ and all $\gamma _ { m } \in ( 0 , 1 )$ , there exist $\delta _ { m } \in$ $\mathbb { R }$ with $| \delta _ { m + 1 } | : = \gamma _ { m } | \delta _ { m } |$ and $\pmb { x } _ { \delta _ { m } } ^ { \star }$ such that
+
+$$
+\begin{array} { r } { \left\| \pmb { x } _ { \delta _ { m } } ^ { \star } - \pmb { x } _ { \delta _ { m + 1 } } ^ { \star } \right\| \leq | \delta _ { m } | - | \delta _ { m + 1 } | . } \end{array}
+$$
+
+(ii) For all $m \in [ M ]$ and all $\gamma _ { m } ~ \in ~ ( 0 , 1 )$ , there exist $\delta _ { m } \in \mathbb { R }$ with $| \delta _ { m + 1 } | : = \gamma _ { m } | \delta _ { m } |$ and $d _ { m } > 1$ such that the function $\hat { f } _ { \delta _ { m } } ( { \pmb x } )$ is $\sigma$ -strongly convex on $N ( \pmb { x } ^ { \star } ; d _ { m } \delta _ { m } )$ .
+
+# Assumptions and Lemmas
+
+We make the following assumptions:
+
+Assumption 1. (A1) $f \colon  { \mathbb { R } ^ { d } } \ \to \  { \mathbb { R } }$ is continuously differentiable and $L _ { g }$ -smooth, i.e., for all $\pmb { x } , \pmb { y } \in \mathbb { R } ^ { d }$ , $\| \nabla f ( { \pmb x } ) - \| \nabla f ( { \pmb x } ) - { \pmb x }$ $\nabla f ( \pmb { y } ) \| \leq L _ { g } \| \pmb { x } - \pmb { y } \|$ . (A2) $f \colon  { \mathbb { R } ^ { d } } \to  { \mathbb { R } }$ is an $L _ { f }$ -Lipschitz function, i.e., for all $\pmb { x } , \pmb { y } \in \mathbb { R } ^ { d }$ , $| f ( \pmb { x } ) - f ( \pmb { y } ) | \leq L _ { f } \| \pmb { x } -$ $_ { \left. \boldsymbol { y } \right| }$ . (A3) Let $( \pmb { x } _ { t } ) _ { t \in \mathbb { N } } \subset \mathbb { R } ^ { d }$ be the sequence generated by an optimizer. (i) For each iteration $t$ , $\mathbb { E } _ { \xi _ { t } } \left[ { \sf G } _ { \xi _ { t } } ( { \pmb x } _ { t } ) \right] = \nabla f ( { \pmb x } _ { t } )$ . (ii) There exists a nonnegative constant $C _ { o p t } ^ { 2 }$ for an optimizer such that $\begin{array} { r } { \mathbb { E } _ { \xi _ { t } } \left[ \| \mathsf { G } _ { \xi _ { t } } ( \pmb { x } _ { t } ) - \nabla f ( \pmb { x } _ { t } ) \| ^ { 2 } \right] \ \leq \ C _ { o p t } ^ { 2 } } \end{array}$ . (A4) For each iteration $t$ , the optimizer samples a mini-batch $\boldsymbol { S } _ { t } \subset \boldsymbol { S }$ and estimates the full gradient $\nabla f$ as
+
+$$
+\nabla f _ { S _ { t } } ( \pmb { x } _ { t } ) : = \frac { 1 } { b } \sum _ { i \in [ b ] } \mathsf { G } _ { \xi _ { t , i } } ( \pmb { x } _ { t } ) = \frac { 1 } { b } \sum _ { \{ i : z _ { i } \in S _ { t } \} } \nabla f _ { i } ( \pmb { x } _ { t } ) .
+$$
+
+f(oAr5a) lT $K _ { \mathrm { o p t } }$ for an optimizer, $t \in \mathbb { N } , \mathbb { E } \left[ \| \nabla f ( \pmb { x } _ { t } ) \| ^ { 2 } \right] \leq K _ { \mathrm { o p t } } ^ { 2 }$
+
+Remark 1. Three algorithms appear in this paper: SGD (Algorithm 2), SHB (Algorithm 4), and NSHB (Algorithm 5). In assumptions (A3)(ii) and (A5), $C _ { \mathrm { o p t } } ^ { 2 }$ and $K _ { \mathrm { o p t } }$ represent optimizer-specific constants. For example, $C _ { \mathrm { S G D } } ^ { 2 }$ is the variance of the stochastic gradient when $( \pmb { x } _ { t } ) _ { t \in \mathbb { N } }$ is the sequence generated by SGD.
+
+# Explicit Graduated Optimization
+
+Algorithm 1 (Sato and Iiduka 2023) below is an embodiment of explicit graduated optimization, where the noise decay rate $\begin{array} { r } { \gamma _ { m } : = \overline { { \{ M - m \} ^ { p } } } ^ { - } } \end{array}$ $( p \in ( 0 , 1 ] )$ is that of a polynomial decay scheduler with power $p$ , which is theoretically optimal in the sense that it satisfies the conditions necessary to ensure that the graduated optimization algorithm does not leave the strongly convex region of the new $\sigma$ -nice function. Algorithm 2 is used to optimize each smoothed function.
+
+Remark 2. In explicit graduated optimization, each smoothed function can be optimized with any algorithm as long as its convergence to a local strongly convex function is guaranteed. We follow the prior work (Sato and Iiduka 2023) and use SGD, which includes GD, in Algorithm 2.
+
+# Algorithm 1: Explicit Graduated Optimization
+
+$$
+\begin{array} { r l } & { \mathrm { \ t e q u i r e : ~ } \epsilon , r , \bar { d } , B _ { 2 } , H _ { 3 } , H _ { 4 } > 0 , p \in ( 0 , 1 ] , } \\ & { \begin{array} { r l } { x _ { 1 } \in \mathbb { R } ^ { d } , b \in [ n ] , \eta > 0 } \\ { \delta _ { 1 } : = \frac { 2 L _ { f } } { \sigma r } } \end{array} } \\ & { \begin{array} { r l } & { \alpha _ { 0 } : = \operatorname* { m i n } \left\{ \frac { \sigma r } { 8 L _ { f } ^ { 2 } \left( 1 + \bar { d } \right) } , \frac { \sqrt { \sigma } r } { 2 \sqrt { 2 } L _ { f } } \right\} , M ^ { p } : = \frac { 1 } { \alpha _ { 0 } \epsilon } } \end{array} } \end{array}
+$$
+
+$$
+\begin{array} { r l } & { \epsilon _ { m } : = \sigma \delta _ { m } ^ { 2 } , T _ { F } : = H _ { 4 } / ( \epsilon _ { m } - H _ { 3 } \eta _ { m } ) } \\ & { \gamma _ { m } : = \frac { ( M - m ) ^ { p } } { \{ M - ( m - 1 ) \} ^ { p } } } \end{array}
+$$
+
+$$
+\begin{array} { l } { \mathbf { \pmb { x } } _ { m + 1 } : = \mathbf { S G D } ( T _ { F } , \pmb { x } _ { m } , \hat { f } _ { \delta _ { m } } , b , \eta ) } \\ { \delta _ { m + 1 } : = \gamma _ { m } \delta _ { m } } \end{array}
+$$
+
+<html><body><table><tr><td>Algorithm 2: SGD with constant learning rate</td></tr><tr><td>Require: TF,𝑥(m) ∈ Rd,fom,b∈ [n],n >0</td></tr><tr><td>fort=1 to TF do (）:=(m）_nfoms( （m））</td></tr><tr><td>end for</td></tr><tr><td></td></tr><tr><td> return xTF+1 = SGD(TF,x(m), fδm,b,n)</td></tr><tr><td></td></tr></table></body></html>
+
+<html><body><table><tr><td>function's reference</td><td>function</td><td>EGO(geo)</td><td>EGO(nice)</td><td>GA</td><td>PSO</td></tr><tr><td>(Ackley1987; Bäck and Schwefel1993)</td><td>Ackley's</td><td>1.80E+01</td><td>4.04E-03</td><td>1.52E+00</td><td>5.37E+00</td></tr><tr><td>(Rahnamayan,Tizhoosh,and Salama 2007)</td><td>Alpine1</td><td>2.34E-01</td><td>1.25E-01</td><td>2.59E-01</td><td>2.72E-04</td></tr><tr><td>(Marcin Molga 2005)</td><td>Drop-Wave</td><td>9.93E-01</td><td>9.94E-01</td><td>9.30E-01</td><td>9.10E-01</td></tr><tr><td>(Yang 2010)</td><td>Ellipsoid</td><td>4.22E-01</td><td>4.82E-04</td><td>5.35E+00</td><td>1.12E-04</td></tr><tr><td>(Griewank 1981)</td><td>Griewank</td><td>2.55E+00</td><td>2.32E-03</td><td>9.88E-03</td><td>3.86E-02</td></tr><tr><td>(Beyer and Finck 2012)</td><td>HappyCat</td><td>2.39E+01</td><td>1.76E+00</td><td>1.12E+00</td><td>5.81E-01</td></tr><tr><td>(Tan 2016)</td><td>HGBat</td><td>5.07E-01</td><td>5.04E-01</td><td>1.25E+00</td><td>5.86E-01</td></tr><tr><td>(Plevris and Solorzano 2022)</td><td>Modified Ridge</td><td>6.63E+00</td><td>6.63E+00</td><td>1.73E+00</td><td>4.57E-01</td></tr><tr><td>(Torn and Zilinskas1989;Rudolph1990)</td><td>Rastrigin's</td><td>1.85E+00</td><td>2.26E-02</td><td>2.44E+01</td><td>1.51E+02</td></tr><tr><td>(Rosenbrock 196O; Dixon and Mills 1994)</td><td>Rosenbrock's</td><td>6.00E+98</td><td>2.44E+127</td><td>9.74E+01</td><td>9.53E+01</td></tr><tr><td>(Marcin Molga 2005)</td><td>Rotated Hyper-ellipsoid</td><td>5.20E-01</td><td>4.95E-04</td><td>6.73E+00</td><td>2.53E-05</td></tr><tr><td>(Salomon 1996)</td><td>Salomon</td><td>7.24E-01</td><td>2.02E-01</td><td>7.54E-01</td><td>2.11E+00</td></tr><tr><td>(Schaffer 1985; Schaffer etal.1989)</td><td>Schaffer's F7</td><td>2.68E+01</td><td>1.12E+01</td><td>6.83E-01</td><td>1.80E+01</td></tr><tr><td>(Schwefel 1981)</td><td>Schwefel</td><td>8.33E+03</td><td>8.33E+03</td><td>7.10E+03</td><td>7.20E+03</td></tr><tr><td>(Schwefel1981)</td><td>Schwefel 2.21</td><td>3.76E+01</td><td>2.06E-02</td><td>2.17E+00</td><td>3.34E+01</td></tr><tr><td>(Schumer and Steiglitz 1968)</td><td>Sphere</td><td>6.98E-07</td><td>1.58E-05</td><td>2.34E-01</td><td>3.46E-06</td></tr></table></body></html>
+
+Table 1: Average values of the optimum results over 50 runs, for Algorithm 1, GA, and PSO, for dimensions $D = 5 0$ .
+
+If the objective function $f$ is a new $\sigma$ -nice function, it is guaranteed that Algorithm 1 will converge to an $\epsilon$ -neighborhood of the global optimal solution of $f$ in $\mathcal { O } \left( 1 / \epsilon ^ { \frac { 1 } { p } } \right)$ rounds. Whether Algorithm 1 works effectively with test functions for global optimization has not been considered in a previous study. This paper deals with 16 traditional benchmark functions to verify the performance of global optimization algorithms (see Table 2 for the function’s name and Appendix B for their definitions). For example, for all $\pmb { x } : = ( \overset { \cdot } { x _ { 1 } } , \cdot \cdot \cdot , x _ { D } ) ^ { \top } \in \mathbb { R } ^ { D }$ , Rastrigin’s function is defined as follows:
+
+$$
+f ( \pmb { x } ) : = \sum _ { i = 1 } ^ { D } \left\{ x _ { i } ^ { 2 } - 1 0 \cos ( 2 \pi x _ { i } ) \right\} + 1 0 D .
+$$
+
+Figure 6 in Appendix B plots Rastrigin’s function for $D =$ 2. Theorem 1 shows that this function, which has many local optimal solutions, is a new $\sigma$ -nice function. The proof of the theorem is in Appendix A.
+
+# Theorem 1. Rastrigin’s function is a new $\sigma$ -nice function.
+
+Theorem 1 implies that Algorithm 1 can achieve global optimum of Rastrigin’s function. To test the algorithm’s performance, we optimized the 16 benchmark functions with it (EGO) with optimal decay rates (nice) and with suboptimal decay rates (geo), where $\gamma _ { m } : = c$ $( c \in ( 0 , 1 ) )$ , i.e., the noise sequence is a geometric progression, and did the same with two well-known global optimization algorithms, i.e., the genetic algorithm (GA) (Holland 1975) and particle swarm optimization (PSO) (Kennedy and Eberhart 1995). The dimension $D$ of the objective functions was set to 50. The experimental environment was Intel Core i9 139000KF CPU.
+
+Table 1 shows the average of the optimum results of 50 runs starting from a random initial point. EGO with both decay rates used GD to optimize the smoothed function. The results for GA and PSO are taken from (Plevris and Solorzano 2022). Note that the optimal value for all functions is 0. See Appendix B for the search range of each objective function and the parameters of the Algorithms. The results in the table indicate that Algorithm 1 (EGO) significantly outperforms the other methods for several objective functions and that EGO with theoretically optimal decay rates (nice) generally performs better than EGO with suboptimal decay rates (geo). Thus, Algorithm 1 with optimal decay rates is effective for traditional global optimization benchmark functions.
+
+However, explicit graduated optimization is not effective for DNNs, such as ResNet (He et al. 2016). Figure 2 shows the results of using Algorithm 1 to train ResNet18 on the CIFAR100 dataset for 200 epochs. Note that it used SGD with $\nabla f _ { S _ { t } } ( { \pmb x } _ { t } + \delta _ { m } { \pmb u } _ { t } )$ as the search direction for decreasing $( \delta _ { m } ) _ { m \in [ M ] }$ , where ${ \pmb u } _ { t } ~ \in ~ \mathbb { R } ^ { d }$ is Gaussian noise and $M = 2 0 0$ ; i.e., the noise $\delta _ { m }$ was decreased each epoch. The experimental environment for training the DNN was as follows: NVIDIA GeForce RTX $4 0 9 0 \times 1 \mathrm { G P U }$ .
+
+![](images/a0a2861267cfd1340672983669c17814891e07f888f84f482990e9e0923297ae.jpg)  
+Figure 2: Loss function value for training versus the number of epochs in training ResNet18 on the CIFAR100 dataset. The solid lines represent the mean value, and the shaded areas represent the maximum and minimum values over three runs.
+
+Compared with vanilla SGD without noise, Algorithm 1 with initial noise values $\delta _ { 1 }$ of 0.1, 0.01, and 0.001 does not achieve significantly lower loss function values; instead, the noise simply interferes with training. In fact, the loss function values are comparable to those of vanilla SGD only when the noise is nearly zero, and it does not fulfill its role of avoiding locally optimal solutions and yielding lower loss function values. The cause is theoretically unknown, but the experimental validity of similar methods in the previous study (Hazan, Yehuda, and Shalev-Shwartz 2016) suggests that the number of parameters in the model is a factor, i.e., that explicit graduated optimization may not be effective for very high dimensional functions. The number of model parameters in the previous study is 23,860, while ours is about 11.2M. Because of these limitations of explicit graduated optimization, we do not see any benefit to applying it to DNNs.
+
+# Implicit Graduated Optimization
+
+Implicit graduated optimization with SGD. As mentioned above, (Sato and Iiduka 2023) showed that simply using SGD generates stochastic noise of level $\delta ^ { \mathrm { S G D } } = \eta \bar { C } _ { \mathrm { S G D } } ^ { 2 } / \sqrt { { { b } } }$ , which smooths the objective function $f$ .
+
+Here, let $\mathbf { \nabla } _ { \pmb { y } _ { t } }$ be the parameter updated by gradient descent (GD) at time $t$ , and let ${ \pmb x } _ { t + 1 }$ be the parameter updated by SGD, i.e.,
+
+$$
+\begin{array} { r l } & { \pmb { y } _ { t } : = \pmb { x } _ { t } - \eta \nabla f ( \pmb { x } _ { t } ) , } \\ & { \pmb { x } _ { t + 1 } : = \pmb { x } _ { t } - \eta \nabla f _ { S _ { t } } ( \pmb { x } _ { t } ) } \\ & { \qquad = \pmb { x } _ { t } - \eta ( \nabla f ( \pmb { x } _ { t } ) + \omega _ { t } ^ { \mathrm { S G D } } ) , } \end{array}
+$$
+
+where $\omega _ { t } ^ { \mathrm { S G D } } : = \nabla f _ { S _ { t } } ( { \pmb x } _ { t } ) - \nabla f ( { \pmb x } _ { t } )$ is stochastic noise of SGD. Then, using Definition 1 and $\begin{array} { r } { \mathbb { E } _ { \xi _ { t } } \left[ \left\| \omega _ { t } ^ { \mathrm { S G D } } \right\| ^ { 2 } \right] \leq \frac { C _ { \mathrm { S G D } } } { \sqrt { b } } } \end{array}$ which holds under Assumptions (A3)(ii) a
+nd (A
+4), we have
+
+$$
+\mathbb { E } _ { \omega _ { t } } \left[ \pmb { y } _ { t + 1 } \right] = \mathbb { E } _ { \omega _ { t } } \left[ \pmb { y } _ { t } \right] - \eta \nabla \hat { f } _ { \frac { \eta C } { \sqrt { b } } } ( \pmb { y } _ { t } ) .
+$$
+
+See Section 3.3 and Appendix A of (Sato and Iiduka 2023) for details on the derivation of equation (2).
+
+Therefore, optimizing the objective function $f$ by SGD is equivalent to optimizing its smoothed version $\hat { f } _ { \delta ^ { \mathrm { S G D } } }$ by GD in the sense of expectation. On the basis of this fact, (Sato and Iiduka 2023) proposed the following algorithm that implicitly achieves graduated optimization by varying the learning rate $\eta$ and batch size $b$ so as to decrease the degree of smoothing $\delta ^ { \mathrm { S G D } }$ during training. That is, they decreased the learning rate $\eta$ and increased the batch size $b$ during training, thereby decreasing the degree of smoothing δSGD. Algorithm 3 is an implicit graduated optimization algorithm that exploits the natural stochastic noise of SGD. The decay rate of $\setminus \delta ^ { \mathrm { S G D } }$ is set so that the combined effect of decreasing the learning rate $\kappa _ { m } \in ( 0 , 1 ]$ and increasing the batch size $\lambda _ { m } \geq 1$ is $\begin{array} { r } { \gamma _ { m } : = \frac { ( M - m ) ^ { p } } { \{ M - ( m - 1 ) \} ^ { p } } } \end{array}$ . Algorithm 2 (SGD) is used to optimize each smoothed function.
+
+$$
+\begin{array} { r l } & { \mathbf { e q u i r e : } \ \epsilon , r , \bar { d } , B _ { 2 } , H _ { 3 } , H _ { 4 } > 0 , p \in ( 0 , 1 ] , } \\ & { \begin{array} { r l } { x _ { 1 } \in \mathbb { R } ^ { d } , b _ { 1 } \in [ n ] , \eta _ { 1 } > 0 } \\ { \delta _ { 1 } : = \frac { \eta _ { 1 } C } { \sqrt { b _ { 1 } } } } \end{array} } \\ &  \begin{array} { r l } { \alpha _ { 0 } : = \operatorname* { m i n } \left\{ \frac { \sqrt { b _ { 1 } } } { 4 L _ { f } \eta _ { 1 } C \left( 1 + \bar { d } \right) } , \frac { \sqrt { b _ { 1 } } } { \sqrt { 2 \sigma } \eta _ { 1 } C } \right\} , M ^ { p } : = \frac { 1 } { \alpha _ { 0 } \epsilon } } \end{array} \end{array}
+$$
+
+$$
+\begin{array} { r l } & { \quad \epsilon _ { m } : = \sigma ^ { 2 } \delta _ { m } ^ { 2 } , ~ T _ { F } : = H _ { 4 } / ( \epsilon _ { m } - H _ { 3 } \eta _ { m } ) } \\ & { \quad \gamma _ { m } : = \frac { ( M - m ) ^ { p } } { \{ M - ( m - 1 ) \} ^ { p } } } \\ & { \quad \kappa _ { m } / \sqrt { \lambda _ { m } } = \gamma _ { m } \left( \kappa _ { m } \in ( 0 , 1 ] , \lambda _ { m } \geq 1 \right) } \\ & { \quad \mathbf { e n d ~ i f } } \\ & { \quad \alpha _ { m + 1 } : = \mathrm { S G D } ( T _ { F } , x _ { m } , \hat { f } _ { \delta _ { m } } , \eta _ { m } , b _ { m } ) } \\ & { \quad \eta _ { m + 1 } : = \kappa _ { m } \eta _ { m } , b _ { m + 1 } : = \lambda _ { m } b _ { m } } \\ & { \quad \delta _ { m + 1 } : = \frac { \eta _ { m + 1 } C } { \sqrt { b _ { m + 1 } } } } \\ & { \quad \_ a \nmid } \end{array}
+$$
+
+Remark 3. In implicit graduated optimization, the algorithm that optimizes each smoothed function must be GD or SGD. Unlike explicit graduated optimization, which explicitly provides a smoothed function, based on (2), the smoothed function can only be optimized by a GD- or SGDlike algorithm. It is unclear which, GD or SGD, is better. Our analysis is valid in both cases, since we provide an analysis of SGD, an extension of GD.
+
+If the objective function $f$ is a new $\sigma$ -nice function, it is guaranteed that Algorithm 3 converges to an $\epsilon$ -neighborhood of the global optimal solution of $f$ in $\mathcal { O } \left( 1 / \epsilon ^ { \frac { 1 } { p } } \right)$ rounds. Since the prior study lacked numerical experiments to verify the performance of Algorithm 3, here, we provide experimental results that are faithful to the decay rate $\gamma _ { m }$ employed in Algorithm 3. Figure 3 shows the results of training ResNet18 on the CIFAR100 dataset with Algorithm 3 with a constant learning rate and constant batch size, i.e. $\kappa _ { m } = 1 , \lambda _ { m } = 1$ (method 1, i.e., vanilla SGD), a decaying learning rate and constant batch size, i.e., $\kappa _ { m } = \gamma _ { m }$ and $\lambda _ { m } = 1$ (method 2), a constant learning rate and increasing batch size, $\kappa _ { m } = 1 , \lambda _ { m } = 1 / \gamma _ { m } ^ { 1 3 / 1 0 }$ (method 3), and a hybrid setting, i.e., $\kappa _ { m } = \gamma _ { m } ^ { 4 / 9 }$ and $\lambda _ { m } = 1 / \gamma _ { m }$ , where the decay rate is set to = {M(−M(−m−)1)}0.9 (M = 200, m ∈ [M ]) (method 4). In a 200-epoch training, methods 2, 3, and 4 update the hyperparameters every epoch. In method 1, the learning rate and the batch size are fixed at 0.1 and 128, respectively. In method 2, the initial learning rate is 0.1 and the batch size is fixed at 128. In method 3, the learning rate is fixed at 0.1 and the initial batch size is 32. In method 4, the initial learning rate is 0.1 and the initial batch size is 32.
+
+Figure 3 indicates that methods 2, 3, and 4 yield a lower loss function and higher test accuracy than those of vanilla SGD (method 1). In particular, the fact that methods 3 and 4, which increase the batch size, are superior in both loss function value and test accuracy suggests that a high learning rate is necessary for successful training. In fact, the loss curve for method 2, which decreases the learning rate, is nearly identical to that of methods 3 and 4 until the middle of training.
+
+![](images/82d591167e920c3d716f834b852e98574565dcebb8365a68b27c2ae58defbe63.jpg)  
+Figure 3: Accuracy score in testing and loss function value in training versus the number of epochs in training ResNet18 on the CIFAR100 dataset with SGD. The solid lines represent the mean value, and the shaded areas represent the maximum and minimum values over three runs.
+
+Implicit graduated optimization with SGD with momentum. There are a number of variants of SGD with momentum; this paper focuses on the simplest ones, i.e., the stochastic heavy ball (SHB) method and normalized stochastic heavy ball (NSHB) method, which are defined as follows:
+
+<html><body><table><tr><td>Algorithm 4: Stochastic Heavy Ball (SHB)</td><td></td></tr><tr><td>Require: xo,n>0,β ∈ [0,1),m-1 := 0</td><td rowspan="3"></td></tr><tr><td>fort=OtoT-1do</td></tr><tr><td>mt :=Vfst(xt)+ βmt-1</td></tr><tr><td>xt+1:=xt-nmt</td><td rowspan="3"></td></tr><tr><td>end for</td></tr><tr><td>return xT</td></tr></table></body></html>
+
+<html><body><table><tr><td>Algorithm5:Normalized Stochastic Heavy Ball (NSHB)</td></tr><tr><td>Require: xo,η>0,β ∈ [0,1),d-1 := 0</td></tr><tr><td>fort=OtoT-1do</td></tr><tr><td>dt :=(1-β)Vfst(xt)+βdt-1</td></tr><tr><td>Xt+1:=xt-ndt end for</td></tr><tr><td></td></tr><tr><td>return xT</td></tr></table></body></html>
+
+(Sato and Iiduka 2024) showed that the SHB and NSHB methods each generate stochastic noise of level,
+
+$$
+\begin{array} { r l r } & { \delta ^ { \mathrm { S H B } } = \eta \sqrt { \left( 1 + \hat { \beta } \right) \frac { C _ { \mathrm { S H B } } ^ { 2 } } { b } + \hat { \beta } K _ { \mathrm { S H B } } ^ { 2 } } , } & \\ & { \delta ^ { \mathrm { N S H B } } = \eta \sqrt { \cfrac { 1 } { 1 - \hat { \beta } } \frac { C _ { \mathrm { N S H B } } ^ { 2 } } { b } } , } & \end{array}
+$$
+
+which smooths the objective function $f$ , where $\begin{array} { r l } { \hat { \boldsymbol { \beta } } } & { { } : = } \end{array}$ β((β12−β)+2 1) . That is, at time t, let yt be the parameter updated by GD and $z _ { t + 1 }$ be the parameter updated by SHB.
+
+Then, the following holds:
+
+$$
+\mathbb { E } _ { \omega _ { t } ^ { \mathrm { s H B } } } \left[ \pmb { y } _ { t + 1 } \right] = \mathbb { E } _ { \omega _ { t } ^ { \mathrm { s H B } } } \left[ \pmb { y } _ { t } \right] - \eta \nabla \hat { f } _ { \delta ^ { \mathrm { s H B } } } ( \pmb { y } _ { t } ) ,
+$$
+
+where $\omega _ { t } ^ { \mathrm { S H B } } : = m _ { t } - \nabla f ( { \pmb x } _ { t } )$ is stochastic noise of SHB. Since optimizing the objective function $f$ with SHB or NSHB is equivalent (in the sense of expectation) to optimizing its smoothed versions, $\hat { f } _ { \delta ^ { \mathrm { S H B } } }$ and $\hat { f } _ { \delta ^ { \mathrm { N S H B } } }$ , with GD, we can use the natural stochastic noise of SHB and NSHB to construct an implicit graduated optimization algorithm. That is, the degree of smoothing, $\delta ^ { \mathrm { S H B } }$ and $\delta ^ { \mathrm { N S H B } }$ , is decreased by decreasing the learning rate $\eta$ and momentum factor $\beta$ and increasing the batch size $b$ during training.
+
+# Algorithm 6: Implicit Graduated Optimization with SHB
+
+<html><body><table><tr><td>bnd βt:=B(²-+1） (vt N) SHB:=m(1+）+βKHB αo:=min</td></tr><tr><td>1 MP 4Lf|δSHB|(1+d)√2o|δSHB form=1toM+1do if m≠M+1then ,TF := H4/(∈m-H3ηm) (M-m)P ∈m := g²gSHB2 Ym i= {M-(m-1)）P</td></tr><tr><td>bm nm√(1+βm (Km,ρm ∈(0,1],λm≥1) end if Xm+1 := SGD(TF,xm, fδm,nm,bm) +PmβmKHB Kmnm(1+pmβm) CB+βmKSHB =m</td></tr></table></body></html>
+
+Algorithm 6 is an implicit graduated optimization that exploits the natural stochastic noise of SHB. The decay rate of $\delta ^ { \mathrm { S H B } }$ is set so that the combined effect of decreasing the learning rate $\kappa _ { m } ~ \in ~ ( 0 , 1 ]$ and momentum factor $\rho ~ \in ~ ( 0 , 1 ]$ and increasing the batch size $\lambda _ { m } ~ \geq ~ 1$ is $\begin{array} { r } { \gamma _ { m } : = \frac { ( M - m ) ^ { p } } { \{ M - ( m - 1 ) \} ^ { p } } } \end{array}$
+
+The following theorem guarantees the convergence of Algorithm 6 for the new $\sigma$ -nice function (See Appendix C for details on the proof of Theorem 2).
+
+Theorem 2 (Convergence analysis of Algorithm 6). Let $\epsilon \in ( 0 , 1 ]$ and $f$ be an $L _ { f }$ -Lipschitz new $\sigma$ -nice function. Suppose that we apply Algorithm 3; after $\mathcal { O } \left( 1 / \epsilon ^ { \frac { 1 } { p } } \right)$ rounds. Then, the algorithm reaches an $\epsilon$ -neighborhood of the global optimal solution $\boldsymbol { x } ^ { \star }$ .
+
+To test the ability of Algorithm 6 to reduce stochastic noise, we compared it with a vanilla SHB method in which the learning rate, batch size, and momentum are all constant. Here, Algorithm 6 used a noise reduction method in which the hyperparameters are updated to reduce the degree of smoothing δSHB.
+
+![](images/7964155a197455bb44b8f0a6073d629a3744a1c136ae7f70af25af22c57eb55a.jpg)  
+Figure 4: Accuracy score in testing and loss function value in training ResNet18 on the CIFAR100 dataset with Algorithm 6 versus the number of epochs. The blue plot represents vanilla SHB, and the other five plots represent Algorithm 6. “lr” means the learning rate. The solid lines represent the mean value, and the shaded areas represent the maximum and minimum values over three runs.
+
+Figure 4 plots the accuracy in testing and the loss function value in training ResNet18 on the CIFAR100 dataset with SHB versus the number of epochs. Here, Algorithm 6 outperformed vanilla SHB in both test accuracy and loss function value, thereby demonstrating that it is superior to SGD with momentum using constant parameters on image classification tasks. We found similar results in training WideResNet-28-10 on the CIFAR100 dataset with SHB (see Figure 8 in Appendix D). See Figure 9 for the results of comparative experiments with warmup and other methods.
+
+Appendix E analyzes the implicit graduated optimization algorithm using stochastic noise in NSHB and presents the results of numerical experiments.
+
+Optimal decaying learning rates for SGD with momentum. In graduated optimization, the optimal decay rate of noise is $\begin{array} { r } { \gamma _ { m } : = \frac { ( \bar { M } - 1 ) ^ { p } } { \{ M - ( m - 1 ) \} ^ { p } } } \end{array}$ $( p \in ( 0 , 1 ] )$ (Sato and Iiduka 2023). In implicit graduated optimization, the stochastic noise $\delta ^ { \mathrm { { o p t } } }$ is proportional to the learning rate $\eta$ , so the optimal learning rate decay rate is likewise $\gamma _ { m }$ , i.e., a polynomial decay with a power less than $p = 1$ . (Sato and Iiduka 2023) conducted experiments on the optimal learning rate for SGD and found that a polynomial decay with a power less than $p = 1$ achieves the smallest loss function value and yields the highest test accuracy, as theory suggests.
+
+In order to see which learning rate scheduler gives the smallest loss function value for SGD with momentum, we trained ResNet34 (He et al. 2016) on the ImageNet dataset (Deng et al. 2009) with SHB for 100 epochs. The results in Figure 5 indicate that a polynomial decay with a power less than or equal to 1 achieves the smallest training loss function. We confirmed similar results in training ResNet18 and WideResNet-28-10 on the CIFAR100 dataset with SHB and NSHB (see Figure 14-17 in Appendix F).
+
+![](images/eed9c37b0acf549f1771c90c52ef2450dfe789ca9082dd188580171f61af74b1.jpg)  
+Figure 5: Accuracy score in testing and loss function value in training ResNet34 on the ImageNet dataset with SHB (Algorithm 4) versus the number of epochs. The solid lines represent the mean value, and the shaded areas represent the maximum and minimum values over three runs.
+
+# Conclusion
+
+We showed that Rastrigin’s function, one of the classical benchmark functions, is a new $\sigma$ -nice function and that explicit graduated optimization with optimal noise scheduling is valid for traditional benchmark functions, but not effective for DNNs. Then, we developed an implicit graduated optimization algorithm using stochastic noise in SGD with momentum and analyzed its convergence. Finally, we conducted experiments on ImageNet on the optimal decaying learning rate scheduler for SGD with momentum and found that the theoretically optimal polynomial decay scheduler with a small power achieves the lowest loss function value. The most important advantage of our approach is that we can theoretically guarantee that SGD with momentum will converge to a global optimal solution only by increasing or decreasing hyperparameters. This has not been achieved by any other method. The contributions that were made by extending the implicit graduated optimization approach of SGD to that of SGD with momentum with stochastic noise include the following:
+
+• Previous theories have been able to guarantee convergence to a local optimal solution for both $\beta  0$ and $\beta  1$ (Gitman et al. 2019). By introducing the momentum factor into the implicit graduated optimization approach, we theoretically show that $\beta  0$ contributes to convergence to the global optimal solution, and we demonstrated its effectiveness in experiments. • From the fact that the degree of smoothing in SGD with momentum is determined by hyperparameters (see Figure 1), when graduated optimization is introduced, the knowledge of the optimal decay rate of the degree of smoothing leads directly to knowledge on the optimal decay of hyperparameters such as the learning rate and momentum factor.
+
+These findings can only be derived from an implicit graduated optimization perspective, and they should be of help to users in setting hyperparameters intuitively.

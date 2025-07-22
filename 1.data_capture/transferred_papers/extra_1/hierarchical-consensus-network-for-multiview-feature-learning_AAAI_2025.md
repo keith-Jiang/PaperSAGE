@@ -1,0 +1,275 @@
+# Hierarchical Consensus Network for Multiview Feature Learning
+
+Chengwei $\mathbf { X _ { i } } \mathbf { a } ^ { 1 }$ , Chaoxi $\mathbf { N i u } ^ { 2 }$ , Kun Zhan1\*
+
+1School of Information Science and Engineering, Lanzhou University 2 Australian Artificial Intelligence Institute, University of Technology Sydney kzhan $@$ lzu.edu.cn
+
+# Abstract
+
+Multiview feature learning aims to learn discriminative features by integrating the distinct information in each view. However, most existing methods still face significant challenges in learning view-consistency features, which are crucial for effective multiview learning. Motivated by the theories of CCA and contrastive learning in multiview feature learning, we propose the hierarchical consensus network (HCN) in this paper. The HCN derives three consensus indices for capturing the hierarchical consensus across views, which are classifying consensus, coding consensus, and global consensus, respectively. Specifically, classifying consensus reinforces class-level correspondence between views from a CCA perspective, while coding consensus closely resembles contrastive learning and reflects contrastive comparison of individual instances. Global consensus aims to extract consensus information from two perspectives simultaneously. By enforcing the hierarchical consensus, the information within each view is better integrated to obtain more comprehensive and discriminative features. The extensive experimental results obtained on four multiview datasets demonstrate that the proposed method significantly outperforms several state-of-the-art methods.
+
+[1.75] 0]s(h) [1 0   
+1.69 0 1   
+1.7 0 0   
+1.78 0 1 0   
+[1.59 [0 1 [0 1   
+Height   
+68 1 0 s(ω)1 0   
+54 1 0 1 60 51 0 67 0 0   
+65 8 [10 1 0   
+Weight Classifying Coding Global
+
+# 1 Introduction
+
+Multiview data are universal in the real world and typically contain multiple views of the same underlying semantic information. Generally, a single view cannot provide adequate information for feature learning. To address this, multiview feature learning aims to integrate the common and complementary information contained in multiple views to generate more discriminative data features than a single view (Chen et al. 2023; Xu et al. 2022).
+
+Multiview feature learning methods are roughly divided into two categories, i.e., traditional and deep methods. However, traditional methods typically suffer from limited representation capacity, and high computational complexity for complex data scenarios. To alleviate these problems, many works propose to perform multiview feature learning based on deep neural networks and achieve superior performance compared to the traditional methods.
+
+Most deep learning methods focus on learning consistency between different view features to obtain a common representation through concatenation or adaptive weighted fusion (Trosten et al. 2021; Yang et al. 2023; Xu et al. 2024b). Canonical Correlation Analysis (CCA) (Hotelling 1936) and co-training (Blum and Mitchell 1998) are two representative methods in consistency learning, achieving promising results in exploring common features across views (Andrew et al. 2013; Wang et al. 2015; Lin et al. 2023). As a promising unsupervised representation learning method, contrastive learning has also gained increasing attention (Chen et al. 2020; He et al. 2020), and several multiview feature learning methods based on contrastive learning have been proposed, e.g., (Trosten et al. 2021) directly conducts alignment-based instance-level contrast across multiple views. (Chen et al. 2023; Xu et al. 2022) rely on additional components such as an MLP projector to obtain a cluster assignment probability, and achieve consistency by contrasting the cluster assignments across views. Moreover, (Yan et al. 2023; Xu et al. 2024a) propose a selection of negative pairs and reweighting strategies to improve contrastive learning performance under multiview scenarios, resulting in additional costs.
+
+In this paper, building on the insight of CCA and contrastive learning in multiview feature learning, we propose the hierarchical consensus network (HCN) which derives three consensus indices to explore hierarchical consensus between views, i.e., classifying, coding, and global consensus. In Figure 1, our motivation is clearly and intuitively presented, making it easy to see the connections among HCN, CCA (Hotelling 1936), and contrastive learning. The objective of classifying consensus is conceptually similar to CCA, while the objective of coding consensus closely resembles contrastive learning. The objective of global consensus aims to capture consensus information from two perspectives simultaneously. Specifically, classifying consensus aims to reinforce class-level correspondence between views. Coding consensus is proposed to achieve contrastive comparison of individual instances between different views. Global consensus minimizes the difference between the different views. Overall, HCN fully characterizes the consensus between views from different perspectives.
+
+To apply the proposed HCN for multiview learning, we employ a view-specific autoencoder to learn the distinct and common information within each view. Besides, we further apply the augmentation technique to increase the training samples for each view. Original and augmented data are fed into the view-specific encoder to obtain latent features. Then, hierarchical consensus learning is conducted on the latent features of the original and the augmented data across views. Specifically, for classifying consensus learning, we minimize the conditional entropy of the class probability in one view conditioned by the other view. For the coding consensus, we employ a weak-to-strong pseudo-supervision cross-entropy between the original and the augmented data in each view. For the global consensus, we minimize the difference between the two latent features. Compared to state-of-the-art (SOTA) methods, HCN explores consensus information in multiview feature learning from novel insights, with a lower complexity, and does not require the introduction of additional components or sample selection and weighting strategies.
+
+The main contributions are summarized as follows: ❶ We introduce hierarchical consensus to explore multiple consistencies between views, providing promising insights into multiview feature learning. $\pmb { \theta }$ We design the Hierarchical Consensus Network (HCN) for multiview feature learning.
+
+HCN effectively learns a comprehensive and discriminative feature by capturing hierarchical consensus among multiple views. ❸ Experiments on four multiview datasets demonstrate the effectiveness of HCN over other SOTA baselines.
+
+# 2 Related Work
+
+Most multiview feature learning methods suffer from drawbacks such as high complexity and limited performance (Chen et al. 2021; Zhan et al. 2018; Wang et al. 2019; Liu et al. 2020). Recently, several consistency-based multiview feature learning methods have been proposed, aiming to maximize consistency between different views. Inspired by the strategy to maximize view consistency between two sets in CCA (Hotelling 1936), (Andrew et al. 2013) maps multiview features into a common space and concatenates the lowdimensional features as the common representation. (Wang et al. 2015) further introduce autoencoders in multiview feature learning compared with (Andrew et al. 2013). Besides, by leveraging co-training strategy (Blum and Mitchell 1998), (Lin et al. 2023) design dual contrastive prediction to learn the cross-view consistency.
+
+As one of the most effective consistent learning paradigms, contrastive learning has achieved SOTA performance (Chen et al. 2020; He et al. 2020). The basic idea of contrastive learning is learning a feature space from raw data by maximizing the similarity between positive pairs while minimizing that of negative pairs. In recent, some methods have shown the success of contrastive learning in multiview feature learning (Trosten et al. 2021; Xu et al. 2022), where similarities of positive pairs are maximized and that of negative pairs are minimized via NT-Xent (Chen et al. 2020). (Trosten et al. 2021) learns common representation by aligning representations from different views at the sample level. (Yan et al. 2023) learns the global structural relationships between samples and utilizes them to obtain consistent data representations. Simultaneously, structural information is utilized to select negative pairs for cross-view contrastive learning. In (Xu et al. 2024a), the weights are optimized based on the discrepancy between pairwise representations, performing self-weighted contrastive learning. Considering consistency between the cluster assignments among multiple views, (Chen et al. 2023) proposes a cross-view contrastive learning method to learn view-invariant representations by contrasting cluster assignments among multiple views. Moreover, contrastive clustering (Li et al. 2021) designed for singleview clustering tasks, constructs two distinct views through data augmentation and subsequently projects them into feature space. Using two separate projection heads, the method conducts contrastive learning at different levels in the row and column space to jointly learn representations and cluster assignments. (Xu et al. 2022) conducts multi-level features contrast from multiple views to achieve consistency. Furthermore, some recent contrastive learning works, notably BYOL (Grill et al. 2020) and SimSiam (Chen and He 2021), have shown the remarkable ability to learn powerful representations using only positive pairs, which has proven to be a simple and effective method (Tian, Chen, and Ganguli 2021).
+
+Representation Learning Hierarchical Consensus Learning X(u) Z(u) x() Y Y(1) Y (2) ： z(1) Zaug √ √ √ √ ↓ Augment Encoder Decoder Lcls LCode LGlb √ f(-10(2) g(·1(2)) → → → ↑ → xaug z(u) x( y Y y Z(2) Z2 aug LRec = ∑x(）_x(²+/x(ug x Classifying Coding Global
+
+# 3 Hierarchical Consensus Learning
+
+We incorporate a hierarchical structure by defining objectives at the matrix, row, and column levels: maximizing the global consensus between the matrices of dual-view learned features aligns the overall representations; maximizing the pairwise coding consensus between rows enables the contrastive comparison of individual instances; and maximizing the classifying consensus between columns aligns class-level representations, similar CCA.
+
+# 3.1 Notations
+
+A multiview dataset $\mathcal { X } ~ = ~ \{ X ^ { ( 1 ) } , X ^ { ( 2 ) } , \ldots , X ^ { ( n _ { v } ) } \}$ typically consists of $n$ samples across $n _ { v }$ views. Specifically, the data of $v$ -th view is represented as $\begin{array} { r l } { X ^ { ( \bar { v } ) } } & { { } = } \end{array}$ $[ \pmb { x } _ { 1 } ^ { ( \bar { v } ) } , \pmb { x } _ { 2 } ^ { ( v ) } , \dotsc , \pmb { x } _ { n } ^ { ( v ) } ] ^ { \top } \ \in \ \mathbb { R } ^ { n \times d _ { v } }$ x(n ]⊤ ∈ Rn×dv , where x(v) denotes the samples with $d _ { v }$ dimensional raw feature. Since each view contains distinct information about the dataset, we use $f \big ( \cdot | \theta ^ { ( v ) } \big )$ to denote nonlinear mappings implemented by the encoder for view $v$ , with the corresponding parameters $\theta ^ { ( v ) }$ . Let $Z ^ { ( v ) } \ = \ [ z _ { 1 } ^ { ( v ) } , z _ { 2 } ^ { ( v ) } , \ldots , z _ { n } ^ { ( v ) } ] ^ { \intercal } \ \in \ \mathbb { R } ^ { n \times k }$ , z(n ]⊤ ∈ Rn×k denote the learned feature from the input in view $\boldsymbol { v }$ by $f ( X ^ { ( v ) } | \theta ^ { ( v ) } )$ where $k$ denotes the feature dimension. We aim to capture hierarchical consensus between the learned features from multiple views in an unsupervised way and generate a more comprehensive and discriminative feature for $\chi$ .
+
+# 3.2 Classifying Consensus Learning
+
+We begin with classifying consensus learning between $Z ^ { ( 1 ) }$ and $Z ^ { ( 2 ) }$ which aims to enhance the consistency of class distribution between views. Taking the first view as an example, we model the class posterior probabilities $y _ { i j } ^ { ( 1 ) }$ or $p ( c _ { j } ^ { ( 1 ) } | \pmb { x } _ { i } ^ { \bar { ( 1 ) } } )$ of sample $\pmb { x } _ { i } ^ { ( 1 ) }$ belonging to the $j$ -th class by applying the softmax layer on $Z ^ { ( 1 ) }$ $\begin{array} { r } { : y _ { i j } ^ { ( 1 ) } = p ( c _ { j } ^ { ( 1 ) } | \pmb { x } _ { i } ^ { ( 1 ) } ) = \frac { \exp ( z _ { i j } ^ { ( 1 ) } ) } { \sum _ { j } \exp ( z _ { i j } ^ { ( 1 ) } ) } } \end{array}$ where $z _ { i j } ^ { ( 1 ) }$ represents the $j$ -th entry of the $i$ -th sample in $Z ^ { ( 1 ) }$ .
+
+In the same way, we obtain yi(j2 or $p ( c _ { j } ^ { ( 2 ) } | \pmb { x } _ { i } ^ { ( 2 ) } )$ based on $Z ^ { ( 2 ) }$ for the second view.
+
+Referring to the similarity kernel function defined in (Haussler 1999) and (Bishop 2006), the joint probability of sample belonging to distinct classes is given by
+
+$$
+\widetilde { p } ( c _ { j } , c _ { h } ) = \int p ( c _ { j } | \pmb { x } _ { i } ) p ( c _ { h } | \pmb { x } _ { i } ) p ( \pmb { x } _ { i } ) \mathrm { d } \pmb { x } _ { i }
+$$
+
+where $c _ { j }$ and $c _ { h }$ denote different classes. Similar to the classifying consensus shown in Figure 1, we define classifying consensus probability. By extending Eq. (1) to the discrete scenario and multiview learning, the joint class probability of discrete random variables between two different views (Ji, Henriques, and Vedaldi 2019; Lin et al. 2021) is defined by
+
+$$
+\widetilde { p } ( c _ { j } ^ { ( 1 ) } , c _ { h } ^ { ( 2 ) } ) = \frac { 1 } { n } \sum _ { i = 1 } ^ { n } y _ { i j } ^ { ( 1 ) } y _ { i h } ^ { ( 2 ) } ,
+$$
+
+Eq. (2) performs a column-wise inner product between crossview matrices $Y ^ { ( 1 ) } = [ y _ { i j } ^ { ( 1 ) } ]$ and $Y ^ { ( 2 ) } = [ y _ { i j } ^ { ( 2 ) } ]$ y( ] to measure similarity, similar to CCA. This measure is normalized by
+
+$$
+p ( c _ { j } ^ { ( 1 ) } , c _ { h } ^ { ( 2 ) } ) = \frac { \widetilde { p } ( c _ { j } ^ { ( 1 ) } , c _ { h } ^ { ( 2 ) } ) } { \sum _ { j , h = 1 } ^ { k } \widetilde { p } ( c _ { j } ^ { ( 1 ) } , c _ { h } ^ { ( 2 ) } ) } .
+$$
+
+Based on the obtained cross-view joint probability $p ( c _ { j } ^ { ( 1 ) } , c _ { h } ^ { ( 2 ) } )$ , it is straightforward to derive $p ( \pmb { c } ^ { ( 1 ) } , \pmb { c } ^ { ( 2 ) } )$ $p ( \pmb { c } ^ { ( 1 ) } ) , p ( \pmb { c } ^ { ( 2 ) } ) , p ( \pmb { c } ^ { ( 2 ) } | \pmb { c } ^ { ( 1 ) } )$ , and $p ( \boldsymbol { c } ^ { ( 1 ) } | \boldsymbol { c } ^ { ( 2 ) } )$ .
+
+For the classifying consensus, the softmax operation ensures independence between the prediction columns, satisfying the decorrelation constraint in CCA. Similar to the CCA objective of maximizing cross-view correlations, classifying consensus aims to align the predictions w.r.t. the same class between two views. To achieve this goal, we minimize the conditional entropy of the class probability of one view conditioned by that of the other view. In other words, if the classes of data points in one view are known, the uncertainty about the classes of corresponding data points in the other view is minimized by the conditional entropy. Then, the classifying consensus is formulated as the conditional entropy between two views:
+
+$$
+\operatorname* { m i n } \mathrm { H } ( \pmb { c } ^ { ( 1 ) } | \pmb { c } ^ { ( 2 ) } ) + \mathrm { H } ( \pmb { c } ^ { ( 2 ) } | \pmb { c } ^ { ( 1 ) } )
+$$
+
+where $\mathrm { H } ( \cdot )$ denotes the entropy operator. However, directly optimizing Eq. (4) induces the risk that all samples are assigned to a particular class. To address this issue, we introduce a regularization term to encourage the class distribution to be balanced in each view. Specifically, we propose to maximize the entropy of the class probability in each view as
+
+$$
+\begin{array} { r } { \operatorname* { m a x } \mathrm { H } ( \pmb { c } ^ { ( 1 ) } ) + \mathrm { H } ( \pmb { c } ^ { ( 2 ) } ) . } \end{array}
+$$
+
+By combining Eqs. (4) and (5), we obtain the final objective for classifying consensus learning:
+
+$$
+\mathcal { L } _ { \mathrm { c l s } } = \alpha \mathrm { H } ( c ^ { ( 1 ) } | c ^ { ( 2 ) } ) - \beta \mathrm { H } ( c ^ { ( 1 ) } ) - \gamma \mathrm { H } ( c ^ { ( 2 ) } )
+$$
+
+where $\alpha , \beta$ and $\gamma$ are trade-off hyperparameters. In this way, we achieve the classifying consensus between views and avoid assigning all samples to a particular class.
+
+# 3.3 Coding Consensus Learning
+
+Different views characterize the same sample from different perspectives with the semantics of the sample shared between views. Based on this, we further propose coding consensus learning. Formally, given the class posterior probability obtained from softmax layer, we employ the cross-entropy for coding consensus learning (Han et al. 2024):
+
+$$
+\mathcal { L } _ { \mathrm { c o d e } } = - \sum _ { i = 1 } ^ { n } \bigl ( ( \pmb { y } _ { i } ^ { ( 2 ) } ) ^ { \top } \log \pmb { y } _ { i } ^ { ( 1 ) } + ( \pmb { y } _ { i } ^ { ( 1 ) } ) ^ { \top } \log \pmb { y } _ { i } ^ { ( 2 ) } \bigr )
+$$
+
+where $_ y$ is the softmax prediction $\scriptstyle { \mathbf { { \vec { x } } } }$ .
+
+# 3.4 Global Consensus Learning
+
+In addition to classifying and coding consensus learning based on the posterior probabilities of data classes, global consensus learning aims to minimize the difference between the two latent features encoded from different views. Thus, the objective of global consensus is given by:
+
+$$
+\mathcal { L } _ { \mathrm { g l b } } = - \mathrm { t r } \Big ( \big ( Z ^ { ( 1 ) } \big ) ^ { \top } Z ^ { ( 2 ) } \Big ) .
+$$
+
+where $\operatorname { t r } ( \cdot )$ denotes the trace operation.
+
+# 3.5 Hierarchical Structure
+
+Eq. (4) defines the column-wise classifying consensus learning objective, corresponding to the column vectors shown in Figure 1. Eq. (7) represents a row-wise contrastive comparison of individual instances, as indicated by the row vectors in Figure 1. Lastly, Eq. (8) maximizes the global consensus, aligning overall representations between views, illustrated by the entire matrix in Figure 1.
+
+The classifying consensus aligns column vectors from different views, similar to CCA, which maximizes cross-view correlations. This correlation maximization is achieved in Eq. (2). Additionally, the decorrelation constraint in each view, typical of CCA, is incorporated here through the softmax operation, which enforces independence across columns in each view. Thus, classifying consensus closely aligns with the principles of CCA.
+
+By optimizing the coding consensus objective, we ensure that the coding assignment of sample $\mathbf { \chi } _ { i }$ remains consistent across views, in line with the definition of multiview data. The connection between coding consensus learning and contrastive learning is formally established in Theorem 1.
+
+Theorem 1. Coding-consensus learning is equivalent to contrastive learning with positive pairs.
+
+The proofs and further corollaries are in Appendix B.2.
+
+As shown in Figure 1, if we denote the learned matrix as $Z = [ \pmb { b } _ { 1 } , \dots , \pmb { b } _ { k } ] \overset { - } { = } [ \pmb { s } _ { 1 } , \dots , \pmb { s } _ { n } ] ^ { \top }$ , we have the relationship:
+
+$$
+\operatorname { t r } \big ( ( Z ^ { ( 1 ) } ) ^ { \top } Z ^ { ( 2 ) } \big ) = \sum _ { j = 1 } ^ { k } ( b _ { j } ^ { ( 1 ) } ) ^ { \top } b _ { j } ^ { ( 2 ) } = \sum _ { i = 1 } ^ { n } ( s _ { i } ^ { ( 1 ) } ) ^ { \top } s _ { i } ^ { ( 2 ) }
+$$
+
+where we focus on the inner products, and then argue that the first term of Eq. (9) operates at the whole matrix level, capturing global alignment; the second term aligns crossview columns, reinforcing class-level correspondence; and the third term reflects the effect of instance-wise row contrastive comparison, focusing on individual sample alignment. Viewed from another perspective, the global consensus simultaneously captures both the coding and classifying effects, as shown in Eq. (9).
+
+# 4 Hierarchical Consensus Network
+
+The general framework is shown in Figure 2. Given multiview data, a view-specific autoencoder is employed to exploit the distinct information (Lin et al. 2021) within each view. Specifically, we denote the encoder as $f ( X ^ { ( v ) } | \theta ^ { ( v ) } )$ that takes the data $X ^ { ( v ) }$ as input and output the latent feature $Z ^ { ( v ) }$ of view $v$ . Inversely, the decoder ${ \bar { g ( Z ^ { ( v ) } | \phi ^ { ( v ) } ) } }$ aims to reconstruct the input data based on the latent feature, denoted as $\widehat { X } ^ { \left( v \right) }$ . We implement the encoder with a four-layer MLP fo lbowed by a softmax. The decoders have the same architecture as the encoders. Then, a reconstruction objective is employed to learn the semantic information of the input.
+
+For each view, drop-feature augmentation is applied to the input data $X ^ { ( v ) }$ to enrich to input data of view $v$ , which is implemented as randomly dropping certain feature dimensions. Formally, we first sample a random vector $m \in \{ 0 , 1 \} ^ { d _ { v } }$ with each entry being drawn from a Bernoulli distribution independently, i.e., $m _ { j } \sim \mathrm { B e r n } ( 1 - \rho )$ , where $m _ { j }$ is the $j$ -th entry of $\scriptstyle m$ and $\rho$ is the drop rate. Therefore, the augmented data of view $v$ is represented as $X _ { \mathrm { a u g } } ^ { ( v ) } = X ^ { ( v ) } [ : , \mathbb { I } ( \pmb { m } ) ]$ where $\mathbb { I } ( \cdot )$ indicates whether each entry of $\mathbf { \nabla } m$ is 1 or 0. The latent feature $Z _ { \mathrm { a u g } } ^ { ( v ) }$ of $X _ { \mathrm { a u g } } ^ { ( v ) }$ is also obtained from the view-specific encoder, i.e., $Z _ { \mathrm { a u g } } ^ { ( v ) } = \bar { f } ( X _ { \mathrm { a u g } } ^ { ( v ) } | \theta ^ { ( v ) } )$ and is used to reconstruct the augmented data.
+
+Specifically, the reconstruction objective is defined by:
+
+$$
+\mathcal { L } _ { \mathrm { R e c } } = \sum _ { v = 1 } ^ { n _ { v } } \bigl ( \| X ^ { ( v ) } - \widehat { X } ^ { ( v ) } \| _ { \mathrm { F } } ^ { 2 } + \| X _ { \mathrm { a u g } } ^ { ( v ) } - \widehat { X } _ { \mathrm { a u g } } ^ { ( v ) } \| _ { \mathrm { F } } ^ { 2 } \bigr ) .
+$$
+
+Given the learned latent features $Z ^ { ( 1 ) } , Z ^ { ( 2 ) } , Z _ { \mathrm { a u g } } ^ { ( 1 ) }$ , and $Z _ { \mathrm { a u g } } ^ { ( 2 ) }$ , we obtain the corresponding class probabilities by applying the softmax operation on them, i.e., $Y ^ { ( 1 ) } , Y ^ { ( 2 ) } , Y _ { \mathrm { a u g } } ^ { ( 1 ) }$ and Ya(u2g). Then, we detail how to conduct consensus learning between and within the two views.
+
+First, we perform the classifying consensus learning between the augmented data from two views. Formally, the joint class probability $p ( \mathbf { \boldsymbol { c } } _ { \mathrm { a u g } } ^ { ( 1 ) } | \mathbf { \boldsymbol { c } } _ { \mathrm { a u g } } ^ { ( 2 ) } )$ is obtained by Eq. (3), and the marginal probability distributions $p (  { c _ { \mathrm { a u g } } } ^ { ( 1 ) } )$ and $p (  { c _ { \mathrm { a u g } } } ^ { ( 2 ) } )$ are calculated by summing along rows and columns of the joint probability matrix respectively. Then, the classifying consensus objective is given by:
+
+$$
+\mathcal { L } _ { \mathrm { C l s } } = \sum _ { u , v = 1 \atop u > v } ^ { n _ { v } } \alpha \mathrm { H } ( c _ { \mathrm { a u g } } ^ { ( u ) } | c _ { \mathrm { a u g } } ^ { ( v ) } ) - \beta \mathrm { H } ( c _ { \mathrm { a u g } } ^ { ( u ) } ) - \gamma \mathrm { H } ( c _ { \mathrm { a u g } } ^ { ( v ) } ) .
+$$
+
+Second, within each view, we conduct coding consensus learning between the augmented data and the original data. The mechanism behind this is similar to contrastive learning which pulls the positive samples closer. Formally, inspired by weak-to-strong pseudo supervision in semi-supervised learning (Sohn et al. 2020; Xu et al. 2024c), we transform the posterior class probabilities $Y$ of the original data into hard labels $\hat { T } = [ \bar { { t _ { i j } } } ] . \hat { t } _ { i j } ^ { ( v ) }$ denotes pseudolabel of the $i$ -th data point belonging to the $j$ -th class in the $\boldsymbol { v }$ -th view.
+
+The coding consensus is defined by a weak-to-strong pseudo-supervision loss ( $\mathrm { \Delta X u }$ et al. 2024c):
+
+$$
+\mathcal { L } _ { \mathrm { C o d e } } = - \sum _ { v = 1 } ^ { n _ { v } } \sum _ { i = 1 } ^ { n } \bigl ( \hat { t } _ { i } ^ { ( v ) } \bigr ) ^ { \top } \log { y _ { i , \mathrm { a u g } } ^ { ( v ) } }
+$$
+
+where tˆi(v) is the one-hot pseudolabel and yi(,va)ug represent the $i$ -th row of $Y _ { \mathrm { a u g } } ^ { ( v ) }$ . By enforcing the feature of the augmented data consistent with that of the raw data, Eq. (12) requires the encoder to learn the invariant semantics of each view.
+
+Finally, we propose the global consensus to capture global alignment between two views by minimizing the difference between the latent features. The objective is defined by:
+
+$$
+\mathcal { L } _ { \mathrm { G l b } } = - \sum _ { u , v = 1 } ^ { n _ { v } } \mathrm { t r } \Big ( \big ( Z ^ { ( u ) } \big ) ^ { \top } Z ^ { ( v ) } + \big ( Z _ { \mathrm { a u g } } ^ { ( u ) } \big ) ^ { \top } Z _ { \mathrm { a u g } } ^ { ( v ) } \Big ) .
+$$
+
+Overall, by minimizing the above inter-view objective, the model is optimized to generate similar features for the same samples between different views. The overall loss objective of the proposed method is given by
+
+$$
+\mathcal { L } = \mathcal { L } _ { \mathrm { R e c } } + \mathcal { L } _ { \mathrm { C l s } } + \lambda _ { 1 } \mathcal { L } _ { \mathrm { C o d e } } + \lambda _ { 2 } \mathcal { L } _ { \mathrm { G l b } }
+$$
+
+where $\lambda _ { 1 }$ and $\lambda _ { 2 }$ denote trade-off hyperparameters.
+
+After the model optimization, the latent embeddings outputted by the encoder of each view are concatenated to obtain the final features for downstream tasks, i.e.,
+
+$$
+Z = \Big [ Z ^ { ( 1 ) } , Z ^ { ( 2 ) } , . . . , Z ^ { ( n _ { v } ) } \Big ] .
+$$
+
+The proposed method is summarized in Algorithm 1.
+
+Algorithm 1: The HCN algorithm.
+
+Input: Multiview dataset $\mathcal { X } = \{ X ^ { \left( v \right) } \} _ { v } ^ { n _ { v } }$ , drop rate $\rho$ , hyperparameters $\lambda _ { 1 }$ $, \lambda _ { 2 } , \alpha , \beta$ $\beta$ , and $\gamma$ .   
+Initialization: $E$ and $\{ \theta ^ { ( v ) } , \phi ^ { ( v ) } , \forall v \in \{ 1 , 2 , \dots , n _ { v } \} \}$ . 1: while $e < E$ do   
+2: for mini-batch samples in $\chi$ do   
+3: Obtain $X _ { \mathrm { a u g } } ^ { ( v ) }$ for each view $v$ ;   
+4: Compute $Z ^ { ( v ) }$ , $Z _ { \mathrm { a u g } } ^ { ( v ) } , Y ^ { ( v ) }$ and $Y _ { \mathrm { a u g } } ^ { ( v ) }$ for each view by the view-specific encoder and the softmax layer; 5: Calculate $\mathcal { L } _ { \mathrm { R e c } }$ and $\mathcal { L } _ { \mathrm { C l s } }$ by Eqs. (10) and (11); 6: Calculate $\mathcal { L } _ { \mathrm { C o d e } }$ and ${ \mathcal { L } } _ { \mathrm { G l b } }$ by Eqs. (12) and (13); 7: Update $\{ \theta ^ { ( v ) } , \phi ^ { ( v ) } , \forall v \}$ by Eq. (14);   
+8: $e = e + 1$ ;   
+9: end for   
+10: end while   
+11: Output: Fused feature: $Z = \left[ Z ^ { ( 1 ) } , Z ^ { ( 2 ) } , \dots , Z ^ { ( n _ { v } ) } \right]$
+
+# 4.1 Computational Complexity
+
+The complexity of HCN is $\mathcal { O } ( n n _ { v } ^ { 2 } k ^ { 2 } b + 2 n n _ { v } d _ { v } h ^ { ( l + 1 ) } )$ where $b , h , l , n$ , and $k$ denote the mini-batch size, the maximum number of hidden layers, the layer number, the number of samples, and the feature dimension, respectively. The derivation process is presented in Appendix B.3.
+
+# 5 Experiments
+
+# 5.1 Experimental Setup
+
+Datasets. We conduct multiview clustering on four widely used datasets to evaluate the proposed HCN, i.e., (1) LandUse-21 (Yang and Newsam 2010) contains 2,100 satellite images across 21 categories, using PHOG and LBP features as two views; (2) Caltech101-20 (Fei-Fei, Fergus, and Perona 2004) includes 2,386 RGB images from 20 subjects, with HOG and GIST features as two views; (3) Scene-15 (FeiFei and Perona 2005) comprises 4,485 images from 15 scene categories, utilizing PHOG and GIST as two views; (4) Noisy MNIST (Wang et al. 2015) uses the original 70k MNIST images as one view and within-class images with white Gaussian noise as the second view. In three views experiments, we use the HOG, GIST, and LBP features. For the Scene-15 and LandUse-21 datasets for the Caltech101-20 dataset, we use the PHOG, LBP, and GIST features.
+
+Comparison Methods. We compare HCN with the following SOTA methods on multiview clustering. The comparison includes Spectral clustering $\mathrm { N g }$ , Jordan, and Weiss 2001), traditional multiview clustering methods such as BMVC (Zhang et al. 2018), PIC (Wang et al. 2019) and EERIMVC (Liu et al. 2020), based on CCA or CCA-related methods DCCA (Andrew et al. 2013), DCCAE (Wang et al. 2015) and $\mathrm { A E ^ { 2 } }$ Nets) (Zhang, Liu, and Fu 2019). Besides, contrastive learning methods are also included, i.e., DCP (Lin et al. 2023), MFLVC (Xu et al. 2022), CVCL (Chen et al. 2023), GCFAggMVC (Yan et al. 2023), DealMVC (Yang et al. 2023), and SEM (Xu et al. 2024a). Finally, a more recent method, MVCAN (Xu et al. 2024b) is employed, which considers the case of noisy views based on deep embedding clustering (Xie, Girshick, and Farhadi 2016).
+
+Table 1: The clustering results with two views on four datasets. “-” indicates unavailable results due to the out-of-memory issue The best and the second result are bold and underlined respectively.   
+
+<html><body><table><tr><td rowspan="2">Method</td><td colspan="3">LandUse-21</td><td colspan="3">Caltech101-20</td><td colspan="3">Scene-15</td><td colspan="3">Noisy MNIST</td></tr><tr><td>ACC</td><td>NMI</td><td>ARI</td><td>ACC</td><td>NMI</td><td>ARI</td><td>ACC</td><td>NMI</td><td>ARI</td><td>ACC</td><td>NMI</td><td>ARI</td></tr><tr><td>SCAgg[NeurIPS01]</td><td>24.69</td><td>30.10</td><td>10.23</td><td>48.78</td><td>60.98</td><td>34.68</td><td>35.26</td><td>35.92</td><td>20.20</td><td>44.10</td><td>40.51</td><td>27.16</td></tr><tr><td>DCCA[ICML13]</td><td>15.51</td><td>23.15</td><td>4.43</td><td>41.89</td><td>59.14</td><td>33.39</td><td>36.18</td><td>38.92</td><td>20.87</td><td>85.53</td><td>89.44</td><td>81.87</td></tr><tr><td>DCCAE [ICML15]</td><td>15.62</td><td>24.41</td><td>4.42</td><td>44.05</td><td>59.12</td><td>34.56</td><td>36.44</td><td>39.78</td><td>21.47</td><td>81.60</td><td>84.69</td><td>70.87</td></tr><tr><td>BMVC[TPAMI19]</td><td>25.34</td><td>28.56</td><td>11.39</td><td>42.55</td><td>63.63</td><td>32.33</td><td>40.50</td><td>41.20</td><td>24.11</td><td>81.27</td><td>76.12</td><td>71.55</td></tr><tr><td>PIC[IJCAI20]</td><td>24.86</td><td>29.74</td><td>10.48</td><td>62.27</td><td>67.93</td><td>51.56</td><td>38.72</td><td>40.46</td><td>22.12</td><td>1</td><td>1</td><td>=</td></tr><tr><td>AE2NetS [CVPR19]</td><td>24.79</td><td>30.36</td><td>10.35</td><td>49.10</td><td>65.38</td><td>35.66</td><td>36.10</td><td>40.39</td><td>22.08</td><td>56.98</td><td>46.83</td><td>36.98</td></tr><tr><td>EERIMVC[TPAMI20]</td><td>24.92</td><td>29.57</td><td>12.24</td><td>43.28</td><td>55.04</td><td>30.42</td><td>39.60</td><td>38.99</td><td>22.06</td><td>65.47</td><td>57.69</td><td>49.54</td></tr><tr><td>MFLVC [cVPR22]</td><td>23.67</td><td>27.50</td><td>11.27</td><td>49.25</td><td>41.40</td><td>45.63</td><td>41.49</td><td>42.28</td><td>24.41</td><td>96.91</td><td>92.44</td><td>93.36</td></tr><tr><td>CVCL [ICCV23]</td><td>25.40</td><td>29.59</td><td>11.78</td><td>34.77</td><td>59.93</td><td>25.70</td><td>38.43</td><td>39.58</td><td>22.53</td><td>97.87</td><td>94.18</td><td>97.87</td></tr><tr><td>DCP [TPAMI23]</td><td>26.23</td><td>30.65</td><td>13.70</td><td>70.18</td><td>68.06</td><td>76.88</td><td>41.07</td><td>45.11</td><td>24.78</td><td>82.78</td><td>84.86</td><td>74.83</td></tr><tr><td>GCFAgg [CVPR23]</td><td>28.06</td><td>32.44</td><td>14.40</td><td>34.12</td><td>53.20</td><td>23.16</td><td>39.72</td><td>41.37</td><td>23.01</td><td>91.44</td><td>86.56</td><td>83.16</td></tr><tr><td>DealMVC[MM23]</td><td>10.41</td><td>7.11</td><td>1.69</td><td>39.56</td><td>56.91</td><td>36.04</td><td>38.96</td><td>42.26</td><td>24.21</td><td>32.57</td><td>28.12</td><td>13.72</td></tr><tr><td>SEM[NeurIPS23]</td><td>30.02</td><td>34.75</td><td>15.93</td><td>37.33</td><td>59.95</td><td>28.44</td><td>40.53</td><td>42.48</td><td>25.04</td><td>60.04</td><td>64.69</td><td>43.15</td></tr><tr><td>MVCAN [CVPR24]</td><td>23.94</td><td>29.57</td><td>10.70</td><td>48.63</td><td>66.80</td><td>44.85</td><td>41.54</td><td>44.38</td><td>25.63</td><td>78.46</td><td>79.01</td><td>70.51</td></tr><tr><td>HCN (ours)</td><td>32.81</td><td>38.58</td><td>17.86</td><td>77.39</td><td>74.64</td><td>88.70</td><td>46.05</td><td>45.56</td><td>28.54</td><td>98.07</td><td>94.83</td><td>95.79</td></tr></table></body></html>
+
+Table 2: The multiview clustering results on three datasets. The best and the second result are bold and underlined, respectively.   
+
+<html><body><table><tr><td rowspan="2">Method</td><td colspan="3">LandUse-21</td><td colspan="3">Caltech101-20</td><td colspan="3">Scene-15</td></tr><tr><td>ACC</td><td>NMI</td><td>ARI</td><td>ACC</td><td>NMI</td><td>ARI</td><td>ACC</td><td>NMI</td><td>ARI</td></tr><tr><td>SCAgg[NeurIPS01]</td><td>26.44</td><td>32.73</td><td>11.91</td><td>48.00</td><td>60.40</td><td>33.82</td><td>34.05</td><td>34.83</td><td>19.73</td></tr><tr><td>MFLVC [CVPR22]</td><td>22.38</td><td>27.23</td><td>9.91</td><td>53.43</td><td>39.33</td><td>44.06</td><td>40.15</td><td>41.41</td><td>24.11</td></tr><tr><td>CVCL [ICCV23]</td><td>23.47</td><td>27.50</td><td>10.61</td><td>36.93</td><td>56.70</td><td>26.24</td><td>44.59</td><td>42.17</td><td>24.11</td></tr><tr><td>DCP [TPAMI23]</td><td>26.66</td><td>32.74</td><td>13.50</td><td>70.58</td><td>69.59</td><td>76.93</td><td>41.81</td><td>45.23</td><td>25.84</td></tr><tr><td>GCFAgg [CVPR23]</td><td>24.95</td><td>29.06</td><td>10.68</td><td>35.24</td><td>56.04</td><td>24.62</td><td>44.14</td><td>43.40</td><td>23.99</td></tr><tr><td>DealMVC[MM23]</td><td>12.04</td><td>9.39</td><td>2.74</td><td>37.76</td><td>47.40</td><td>34.35</td><td>40.02</td><td>42.99</td><td>24.16</td></tr><tr><td>SEM[NeurIPS23]</td><td>25.12</td><td>30.12</td><td>11.55</td><td>37.34</td><td>62.51</td><td>28.66</td><td>42.45</td><td>41.25</td><td>26.67</td></tr><tr><td>MVCAN [cVPR24]</td><td>26.18</td><td>32.53</td><td>12.57</td><td>50.04</td><td>66.04</td><td>44.85</td><td>42.07</td><td>44.38</td><td>25.57</td></tr><tr><td>HCN (ours)</td><td>33.30</td><td>38.55</td><td>18.82</td><td>71.35</td><td>68.61</td><td>73.25</td><td>45.20</td><td>44.52</td><td>28.18</td></tr></table></body></html>
+
+Table 3: Ablation study of each component in HCN.   
+
+<html><body><table><tr><td rowspan="2">HCN w/o</td><td colspan="2">LandUse-21</td><td colspan="2">Noisy MNIST</td></tr><tr><td>ACC</td><td>NMI ARI</td><td>ACC</td><td>NMI ARI</td></tr><tr><td rowspan="4">LRec Lcls LGlb</td><td>32.27</td><td>37.82 17.23</td><td>97.93</td><td>94.60 95.51</td></tr><tr><td>24.57</td><td>26.22 10.11</td><td>25.62</td><td>24.58 9.79</td></tr><tr><td>32.21</td><td>38.02 17.73</td><td>97.30</td><td>93.41 94.20</td></tr><tr><td>32.62</td><td>38.19 17.79</td><td>97.82</td><td>94.44 95.29 93.96</td></tr><tr><td rowspan="2">DA HCN</td><td>31.95</td><td>38.06 17.63</td><td>97.19</td><td>93.11</td></tr><tr><td>32.81</td><td>38.58 17.86</td><td>98.07</td><td>94.83 95.79</td></tr></table></body></html>
+
+Implementation Details. We select the best performance for each experiment and report the average performance of five runs with different seeds. $k$ -means clustering algorithm is utilized to obtain the clustering results. To have a fair comparison, all the methods use the same views on each dataset, and use three views in multiview setting. In addition, following the DCP (Lin et al. 2023), we only use a subset of Noisy MNIST consisting of 10k validation images and 10k testing images in the experiments. More details are in Appendix C.1.
+
+Evaluation Metrics. To evaluate the clustering for our HCN, three widely used clustering metrics are employed, i.e., Normalized Mutual Information(NMI), Accuracy (ACC), and Adjusted Rand Index (ARI). For these metrics, a higher numerical value represents a better clustering.
+
+# 5.2 Experimental Results
+
+The clustering results on four datasets are shown in Tables 1 and 2, where Table 1 reports the performance with two views and Table 2 presents the results of three views. From the tables, we have the following observations: (1) Our approach significantly outperforms SOTA baselines on nearly all settings. Remarkably, in Table 1, our approach demonstrates outstanding performance on the Caltech101-20 and Scene15 datasets, significantly outperforming the best comparison
+
+$\mathcal { L } \times 1 0 ^ { 2 }$ $\mathcal { L } \times 1 0 ^ { 3 }$   
+0.35 -0.5 0.8 -2.8   
+0.30 0.25 -1.5 0.6 -1.0 ACC NMI -3.0   
+0.20 -2.0 0.4 ARI -3.2   
+0.15 -2.5 0.2 L -3.4   
+0.10 -3.0 0 10   20 30 40  50 60 0 10 20 30 40 50 (a) LandUse-21 (b) Noisy MNIST
+
+![](images/48fe5664cacada14ea8018bc49518fceceb490d2edb4ae3e8316cf46903989cc.jpg)  
+Figure 3: Convergence and clustering performance of HCN with increasing epoch on LandUse-21 and Noisy MNIST.
+
+method in ACC and NMI. (2) Compared to contrastive multiview clustering methods, the proposed approach achieves SOTA results. This is attributed to our hierarchical consensus network capturing consensus at different levels, resulting in more comprehensive and discriminative features.
+
+# 5.3 Ablation Study
+
+To validate the importance of each component in HCN, we conducted ablation studies by discarding each component. The results are shown in Table 3, where DA means we apply classifying consensus objective without data augmentation. It can be observed that classifying consensus learning plays a more vital role in multiview feature learning than others as the clustering performance is significantly improved by adding classifying consensus objective. The coding consensus and the global consensus objective also improve clustering performance. Furthermore, Table 3 also demonstrates that data augmentation helps learn more robust, invariant, and discriminative features of the multiview data.
+
+# 5.4 Model Analysis
+
+![](images/e686ea68281662bf6fd6eb6c8b137a39ab5bdc0a5165d30f6d52fe949e982be1.jpg)  
+Figure 5: Visualizations on Noisy MNIST with baselines.
+
+![](images/731e4909b632b0c49d323bb8ea99bd758dbd21f620ef325dc896d8ed2d4d4eed.jpg)  
+Figure 4: Parameter sensitivity of drop rate $\rho$ .   
+Figure 6: Parameter sensitivity of $\lambda _ { 1 }$ and $\lambda _ { 2 }$ .
+
+Convergence Analysis. We investigate the convergence of the proposed method. As illustrated in Figure 3, we provide the dynamics of loss value and three clustering metrics with increasing epochs on the LandUse-21 and Noisy MNIST datasets. From Figure 3, we see that the loss value decreases rapidly in a few iterations until convergence is achieved. Meanwhile, the clustering performance metrics quickly increase and stabilize after several epochs. This demonstrates the promising convergence property of HCN.
+
+Analysis of Hyperparameters. Without loss of generality, we investigate the sensitivity of the proposed method w.r.t the trade-off hyperparameters $\lambda _ { 1 }$ and $\lambda _ { 2 }$ on the Noisy MNIST and LandUse-21 datasets, where $\lambda _ { 1 }$ and $\lambda _ { 2 }$ range from $\{ 0 . 0 1$ , 0.05, 0.1, 0.5, 1, 5}. As shown in Figure 6, the accuracy values achieve relatively stable with most combinations of $\lambda _ { 1 }$ and $\lambda _ { 2 }$ . In addition, Figure 4 presents the sensitivity of HCN w.r.t the drop rate $\rho$ which varies in a range of [0, 0.2] with 0.02 intervals. The results show that the results are relatively stable with $\rho$ varying within a wide range.
+
+# 5.5 Visualization
+
+In Figure 5, we provide the $t$ -SNE visualizations of our approach and other baselines on Noisy MNIST. Specifically, we visualize the fused features learned by the encoder of the proposed HCN. From the figure, we observe that raw features are non-discriminative at the initial stage. After training with HCN, the learned features become more discriminative among different classes and each class becomes more compact compared to baselines, demonstrating the effectiveness of HCN for multiview feature learning. The visualizations of other comparison methods are in Appendix C.3.
+
+# 6 Conclusion
+
+In this paper, we explore hierarchical consensus learning for multiview feature learning and introduce three consensus indices across views, i.e., classifying, coding, and global consensus, providing promising insights into multiview feature learning. Specifically, classifying consensus explores consistency between views from a CCA perspective, while the coding consensus closely resembles contrastive learning. Global consensus simultaneously captures both the coding and classifying effects. Based on these, we propose HCN for multiview feature learning. HCN effectively captures hierarchical consensus between different views from different perspectives, resulting in more comprehensive and discriminative features. Extensive experiments and ablation studies on four multiview datasets validate the superiority and effectiveness of our HCN method.
+
+# Acknowledgments
+
+This work was supported by the National Natural Science Foundation of China under Grant No. 62176108, Natural Science Foundation of Qinghai Province of China under No. 2022-ZJ-929, Science Foundation of National Archives Administration of China under No. 2024-B-006, and Supercomputing Center of Lanzhou University.

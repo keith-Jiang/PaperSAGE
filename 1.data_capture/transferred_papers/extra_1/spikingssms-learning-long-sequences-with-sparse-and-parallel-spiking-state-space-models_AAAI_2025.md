@@ -1,0 +1,204 @@
+# SpikingSSMs: Learning Long Sequences with Sparse and Parallel Spiking State Space Models
+
+Shuaijie Shen\*,1,2, Chao Wang\*,1,2, Renzhuo Huang1,2, Yan Zhong2,3, Qinghai $\mathbf { G u o } ^ { 2 }$ , Zhichao $\mathbf { L u } ^ { 4 }$ Jianguo Zhang †,1,5, Luziwei Leng†
+
+1 Department of Computer Science and Engineering, Southern University of Science and Technology, Shenzhen 2 ACSLab, Huawei Technologies Co., Ltd., Shenzhen 3 School of Mathematical Sciences, Peking University, Beijing 4 Department of Computer Science, City University of Hong Kong, Hong Kong 5 Pengcheng Laboratory, Shenzhen {shensj2024, wangc2023, huangrz2023}@mail.sustech.edu.cn, zhongyan $@$ stu.pku.edu.cn, guoqinghai $@$ huawei.com, zhichao.lu@cityu.edu.hk, zhangjg $@$ sustech.edu.cn, lengluziwei@huawei.com
+
+# Abstract
+
+Known as low energy consumption networks, spiking neural networks (SNNs) have gained a lot of attention within the past decades. While SNNs are increasing competitive with artificial neural networks (ANNs) for vision tasks, they are rarely used for long sequence tasks, despite their intrinsic temporal dynamics. In this work, we develop spiking state space models (SpikingSSMs) for long sequence learning by leveraging on the sequence learning abilities of state space models (SSMs). Inspired by dendritic neuron structure, we hierarchically integrate neuronal dynamics with the original SSM block, meanwhile realizing sparse synaptic computation. Furthermore, to solve the conflict of event-driven neuronal dynamics with parallel computing, we propose a lightweight surrogate dynamic network which accurately predicts the after-reset membrane potential and compatible to learnable thresholds, enabling orders of acceleration in training speed compared with conventional iterative methods. On the long range arena benchmark task, SpikingSSM achieves competitive performance to state-of-the-art SSMs meanwhile realizing on average $90 \%$ of network sparsity. On language modeling, our network significantly surpasses existing spiking large language models (spikingLLMs) on the WikiText103 dataset with only a third of the model size, demonstrating its potential as backbone architecture for low computation cost LLMs.
+
+# Code — https://github.com/shenshuaijie/SDN Extended version — https://arxiv.org/abs/2408.14909
+
+# Introduction
+
+Recent years have witnessed the proliferation of real-world time-series datasets in various domains, which often require reasoning over tens of thousands of time steps (Tay et al. 2021a). Therefore, plenty of sequence models have emerged in recent years, which aim to model the long-range dependencies (LRDs) in sequential data to achieve human-level performance across diverse modalities, encompassing text, vision, audio, and video (Gu, Goel, and Re 2022). Among these methods, growing attention has been given to Transformer (Vaswani et al. 2017), since this architecture has led to remarkable developments in the areas of vision and speech. However, for an input sequence of length $L$ , it requires the high-cost computational complexity of $\mathcal { O } ( L ^ { 2 } )$ during training and inference in the module of self-attention, which is one of the core contextualizing components in the Transformer model. Although some Transformer variants (Kitaev, Kaiser, and Levskaya 2020; Zaheer et al. 2020; Katharopoulos et al. 2020; Choromanski et al. 2021) are proposed to reduce the compute and memory requirements, their performances on performing long-range reasoning remain considerably suboptimal (Gu, Goel, and Re 2022).
+
+Recurrent neural networks (RNNs) (Schuster and Paliwal 1997; Sherstinsky 2020) have emerged early for learning on the variable-length input sequences, which requires only $\mathcal { O } ( 1 )$ operations with respect to the sequence length. However, constrained hidden state space and gradient vanish problem have limited their learning of long sequences. To address this problem, innovative works such as RWKV (Peng et al. 2023) and state space models (SSMs) (Gu, Goel, and Re 2022; Gu and Dao 2023) are proposed by introducing an appropriate design of hidden states for handling LRDs with both training parallelizability and inference efficiency. RNNs owes part of its inspiration to cognitive and neurological computational principles (Lipton, Berkowitz, and Elkan 2015), which also serve as the foundation for another class of biologically-grounded architectures known as Spiking Neural Networks (SNNs) (Maass 1997). With their potential in low-energy computing, SNNs have gained a lot of attention within the past decades. Recently, they have been shown to be as efficient as artificial neural networks (ANNs) for vision tasks (Che et al. 2022; Zhou et al. 2022; Yao et al. 2024; Che et al. 2024) under convolution or Transformer architectures. However, despite the intrinsic temporal dynamics, SNNs are rarely used for long sequence tasks. Note that SNNs under convolution or Transformer architectures often need a certain simulation time window to improve spike-based representation, causing inference delays compared to their artificial counterparts. This disadvantage can be avoid for SNNs under RNN architecture since they can make use of the inherent temporal dimension for dynamic computing.
+
+In this work, we explore an integration of spiking neurons with SSMs, and develop SpikingSSMs for long sequence learning, combining efficient parallel training and low-energy, spike-based sparse computation. Several recent works have proposed binary SSM (Stan and Rhodes 2024) or stochastic spiking SSM (Bal and Sengupta 2024). However, they have limited exploration or overlooked the intricate dynamics that characterize biological spiking neurons, leading to incomplete interpretability and performance degradation. To this end, we adopt the widely used Leaky Integrate-and-Fire (LIF) neuron with deterministic reset mechanisms (Gerstner et al. 2014). To reconcile the conflict of its asynchronous event-driven dynamics with parallel computing, we propose a surrogate dynamic network which accelerates training and is dispensable during inference without adding additional parameters to the network. Through an equivalence study we demonstrate the versatility of SDN for approximating parametric LIF neuron models and its potential as general purpose module for parallel computing SNNs. The key contributions of this study are summarized as follows:
+
+• We introduce SpikingSSMs for long sequence tasks, which merge the strengths of SSMs in parallel computing and long sequence modeling with sparse computation of SNNs.   
+• To address the challenges posed by event-driven neuronal dynamics in the context of parallel computing, we propose a surrogate dynamic network (SDN) to approximate the dynamics of LIF neurons via a well-designed model, which extremely accelerates the training of SpikingSSMs with only negligible additional computation.   
+• We also highlight the equivalence of SDN for different thresholds and incorporate learnable thresholds into our model architecture, which further improves network performance.   
+• We evaluate our method on sequential and permuted sequential MNIST classification tasks, as well as the Long Range Arena (LRA) benchmark, where our model achieves competitive performance with state-of-the-art SSMs meanwhile with high sparsity. Additionally, in large-scale language modeling task on the WikiText-103 dataset. Our model sets a new record in the field of SNN, demonstrating its scalability.
+
+# Related Work
+
+# Long Sequence Modeling
+
+The essential problem of sequence modeling is compressing context into a certain state. Driven by this problem, sequence models explore trade-offs between efficiency and effectiveness. For example, Attention mechanism (Vaswani et al. 2017; Dao et al. 2022; Dao 2023) does not compress context at all, i.e. it stores the entire context (i.e. the
+
+KV cache) during auto-regressive inference, which is effective but inefficient since this causes the slow linear-time inference and quadratic-time training (Sun et al. 2023; Yang et al. 2023). On the other hand, recurrent models compress context into a finite state, resulting in constant-time inference and linear-time training. However, their effectiveness is limited by how well this state has compressed the context and the fixed representation space (Peng et al. 2023; Qin et al. 2024). SSMs have emerged as compelling frameworks for sequence modeling. HiPPO (Gu et al. 2020) revolutionized this field by compressing long inputs into dynamic, polynomial-based representations using orthogonal polynomials. S4 (Gu, Goel, and Re 2022) further evolved this approach by introducing a low-rank correction, enabling stable diagonalization and simplifying operations with Cauchy kernels. A series of later works have further improved efficiency of the model using advanced techniques such as parallel scan (Smith, Warrington, and Linderman 2023), Fast Fourier Transform (FFT) (Fu et al. 2023; Duhamel and Vetterli 1990) and gating mechanism (Mehta et al. 2023). A very recent work, Mamba (Gu and Dao 2023) focuses on enhancing the selectivity of the state representation, balancing efficiency and effectiveness without compromising contextual information. Aided with hardware-optimized algorithms the model demonstrated strong performance on temporal tasks up to million-length sequences such as language modeling.
+
+# SNNs for Sequence Modeling
+
+With the improvement of SG training methods, SNNs adopting conventional RNN architectures have been applied to sequence classification tasks and achieved high accuracy (Bellec et al. 2018; Yin, Corradi, and Bohte´ 2021, 2023). However, limited by the architecture and serial processing, pure RNN-based SNNs are rarely applied to long sequence learning. To this end, enabling efficient parallel computing of SNN is critical. PSN (Fang et al. 2023) achieved it by removing the reset of spiking neuron, however with the cost of increased firing rate and insufficiency in network sparsity. PSU (Li et al. 2024b) proposed parallel spiking units which decoupled the integration-spiking-resetting process by introducing a probabilistic reset mechanism and effectively improved network sparsity. However, its learnable parameter is quadratic to the sequence length which impeded the scalability of the method. Leveraging on the Legendre Memory Units (LMU) for sequence modeling (Voelker, Kajic´, and Eliasmith 2019), SpikingLMUFormer (Liu et al. 2024) augmented the LMU with convolutional layers and spiking activation, surpassing transformers in long sequence modeling. The recent progress of SSMs has also inspired works developing their spiking versions. Du, Liu, and Chua proposed SpikeS4 by simply stacking LIF neurons on S4 layers and applied for speech tasks. Binary S4D (Stan and Rhodes 2024) constructed binary SSM by directly applying spiking activation function on the summation of hidden states, which maintains parallel training but ignores neuronal dynamics and sparsity. A recent work (Bal and Sengupta 2024) proposed S6-based SNN which improved network sparsity by implementing a stochastic spiking neuron for SSM, however the model exhibited significant accuracy drop compared to the original model, partially attributed to the stochastic noise in gradients. In this work, we adopt widely used deterministic reset dynamics for spiking neurons, and develop solutions to solve the conflict of their asynchronous event-driven feature with parallel computing.
+
+# SNNs for Language Modeling
+
+Motivated by the potential of constructing low-energy large language models, several recent works have explored combining SNNs with language models. SpikeGPT (Zhu et al. 2023) adopted spike activation for the output of RWKV (Peng et al. 2023) blocks and applied to large scale language modeling tasks. SpikeBERT (Lv et al. 2024) built upon Spikformer (Zhou et al. 2022) and distilled knowledge from the original BERT (Devlin et al. 2018). In this work, we develop large scale SNNs based on SSM architectures for language modeling.
+
+# Method
+
+# Preliminaries
+
+LIF Neuron The LIF neuron is a simplified version of biological neuron models (Gerstner et al. 2014), which captures the ”leaky-integrate-fire-reset” process and is widely used in SNNs for machine learning as it balances tractability and temporal dynamics. With $t$ denoting the time step, the LIF neuron is formulated by following equations:
+
+$$
+u _ { t } ^ { \prime } = \tau u _ { t - 1 } + I _ { t }
+$$
+
+$$
+s _ { t } = H ( u _ { t } ^ { \prime } - v _ { \mathrm { t h } } )
+$$
+
+$$
+\mathrm { S o f t r e s e t : } \ u _ { t } = u _ { t } ^ { \prime } - s _ { t } v _ { \mathrm { t h } }
+$$
+
+$$
+\mathrm { H a r d r e s e t } : u _ { t } = u _ { t } ^ { \prime } ( 1 - s _ { t } ) + s _ { t } u _ { r }
+$$
+
+where input currents $I$ are linearly integrated into the leaky membrane potential $u$ of the neuron, and then a spike $s$ is determined to be fired if the current $u$ surpasses a threshold $v _ { \mathrm { t h } }$ , with $H$ denoting the Heaviside function. At last, the membrane potential is reset according to the soft reset mechanism (Eq. 3) or the hard reset mechanism (Eq. 4). The hard and soft reset mechanisms embody different neuronal memory strategies, where the hard reset forget the history after spiking and reset to a reset potential $u _ { r }$ (we set it to 0 in this work), while the soft reset still keeps all the history subtracted by a reset after spiking. In order to realistically mimic biological neurons, the hard reset mechanism is most commonly used in spiking networks.
+
+Surrogate Gradient Training of SNN Since the spikes are considered identical, the spiking activation function $H$ is defined as a Heaviside function which is non-differentiable at $x = 0$ and has a derivative value of 0 elsewhere. Therefore, surrogate gradient (SG) methods (Esser et al. 2016; Bellec et al. 2018) are proposed to solve this issue. The surrogate gradient function is defined as a soft relaxed function that approximates the original discontinuous gradient of the spiking activation function. Typical SG functions are usually differentiable everywhere and have a nonzero derivative value near the threshold, such as rectangular (Zheng et al. 2021) and triangular (Bellec et al. 2018) functions, etc.
+
+State Space Model SSMs are broadly used in many scientific disciplines, which map a 1-dimensional signal $x$ to an $\mathbf { N }$ -dimensional latent signal $h$ and project it to a 1- dimensional output signal $y$ . For a discrete input sequence $x _ { 1 : L }$ , through certain discretization rule ( $\mathrm { G u }$ et al. 2024) the SSMs can be defined by:
+
+$$
+h _ { t } = \bar { A } h _ { t - 1 } + \bar { B } x _ { t }
+$$
+
+$$
+y _ { t } = C h _ { t }
+$$
+
+with subscript $t$ denoting the time step. The parameters are the state matrix $\bar { A } \in \mathbb { R } ^ { N \times N }$ and other matrices $\bar { B } \in \mathbb { R } ^ { N \times 1 }$ , $C \in \mathbb { R } ^ { 1 \times N }$ . Theoretically, $\bar { A }$ can be diagonalized for efficient computation (Gupta, Gu, and Berant 2022). Within a layer of the network, the input is always multidimensional rather than 1-dimension, therefore, an SSM layer handles multiple features by multiple independent SSMs (with different parameters). In parallel computing, the SSM can be expressed as the convolution between convolution kernels and input signals, with the initial condition $y _ { 0 } = 0$ :
+
+$$
+y _ { t } = \sum _ { k = 1 } ^ { t } C \bar { A } ^ { t - k } \bar { B } x _ { k }
+$$
+
+In practice, this computation can be further accelerated by FFT with time complexity ${ \mathcal { O } } ( L \log ( L ) )$ (Gupta, Gu, and Berant 2022)].
+
+# Spiking S4 Block
+
+It has been shown that the diagonal version of SSM (Gupta, Gu, and Berant 2022) maintains performance while simplifying the model. Therefore, we choose the latest S4D model (Gu et al. 2024) as the backbone to verify our method. The output $y$ of the state space block is now activated by an LIF neuron, i.e. the $y _ { t } = C h _ { t }$ is treated as the input current of the neuron:
+
+$$
+\begin{array} { r } { \boldsymbol { u } _ { t } ^ { \prime } = \boldsymbol { \tau } \boldsymbol { u } _ { t - 1 } + \boldsymbol { y } _ { t } } \\ { \boldsymbol { s } _ { t } = \boldsymbol { H } ( \boldsymbol { u } _ { t } ^ { \prime } - \boldsymbol { v } _ { \mathrm { t h } } ) } \end{array}
+$$
+
+The spiking output is then feed into the FC layer of the next spiking S4 block, which undergoes addition operation with the weight matrix, realizing low-energy, sparse synaptic computation. The threshold largely controls the spiking rate of the neuron, inspired by previous works (Rathi and Roy 2021), we set it as a learnable parameter during training to optimize network performance. A comparison of different s4 blocks and the spiking s4 block is shown in Fig. 1. Interestingly, from a neurobiological perspective, the structure of the spiking S4 block resembles a multi-time scale dendritic neuron (London and Ha¨usser 2005; Zheng et al. 2024), with $h$ representing dendrites and $y$ representing the soma which receives collective input from dendrites, both characterized by self-recurrent temporal dynamics.
+
+# Surrogate Dynamic Network
+
+Since $y$ can be calculated in parallel, given an input sequence $y _ { 1 : T }$ to the spiking neuron, under hard reset, $\boldsymbol { u } _ { t }$ with $t \in$ $[ 1 , T ]$ can be formulated as:
+
+$$
+u _ { t } = \sum _ { i = 1 } ^ { t } \left[ \prod _ { j = i } ^ { t - 1 } ( 1 - s _ { j } ) \cdot \tau ^ { t - i } \cdot y _ { i } \right]
+$$
+
+![](images/50945dbca9773acb8c9fc31f3bfaff2a9cb1534d082164a5727fa8b6d4e01ba2.jpg)  
+Figure 1: Architecture of SpikingSSM. (a) Forward computation graph of SpikingSSM in one layer. Operation $r$ denotes the reset mechanism. The learnable parameter $\theta$ denotes parameters that influence the spiking function $f$ , such as the threshold. (b) Comparison of different SSMs. The original SSM outputs float point number. SpikingSSM replaces the non-linear function of original SSM with an LIF neuron, adding neuronal dynamics on a higher hierarchy. SAF denotes the spiking activation function. The left panel denotes the computation stage of different variables and their corresponding dimensions, with $D , N , L$ denoting the model dimension, the hidden dimension of SSM and the sequence length, respectively.
+
+It can be seen that the membrane potential is determined by the past spiking history of the neuron which can not be computed in parallel, thus SNNs always adopt the form of iterative computing. The nonlineariy of spiking activation, especially the event-driven reset mechanism prevents parallel computing of SNNs, which makes them not practical for efficient training on modern hardware, especially for long sequence tasks. The neural networks, however, are designed for handling the mapping between inputs and outputs, and can be parallelized on modern hardware. Since spiking neurons with fixed parameters must produce the same outputs with the same inputs, the ’neuron’ can be considered as a black-box that maps the input to spike sequence, which is exactly what neural networks are good at. Therefore, we propose using a pre-trained neural network, dubbed as Surrogate Dynamic Network, to predict the spike train in parallel. Specifically, we train a network $f$ , which learns the neuronal dynamics that maps input to output spike trains. For example, a neural network to predict spike train based on all timestep input can be expressed as:
+
+$$
+s _ { 1 : T } = f ( I _ { 1 : T } )
+$$
+
+where $I _ { 1 : T }$ is the input current from time-step 1 to $T$ , and $s _ { 1 : T }$ is the corresponding spike train predicted by the network $f$ .
+
+Meanwhile, for the sake of efficiency, the network should be very small such that the forward inference can be done with low computation cost. As demonstrated in the experiment, a 3-layer network with 1-D convolution is sufficient to learn the neuron dynamics and accurately predict the spike, as shown in Fig. 2 (more details are presented in the experiment section). To further accelerate training and simplify the computational graph, we switch the trained SDN to inference mode without backpropagation during training of the task network, using its predicted spike train and the input to compute the membrane potential as equation 10. Finally, the spike is determined by the membrane potential as the output of the spiking S4 block. During test mode, the SDN can be either kept for parallel inference with linear time complexity with respect to the sequence length, or removed for realtime iterative inference with time complexity $\mathcal { O } ( 1 )$ , without adding additional parameters to the network, i.e. spiking neurons switch to the original reset mechanism. Note that in order to reduce the complexity of computational graph, the SDN can also be trained to predict the membrane potential after leaking, i.e., the $\cdot _ { \tau u _ { t - 1 } } ,$ term in equation 8. In this case, the computational graph has a similar form as in spatial learning through time (SLTT) (Meng et al. 2023), which has been demonstrated effective and more efficient than the traditional backpropagation through time (BPTT) for the training of SNN. More details of the derivation are provided in the supplement material.
+
+# Learnable Threshold
+
+The threshold determines the moment of spike generation and largely modulates the spiking rate of SNN. Previous works (Rathi and Roy 2021; WANG, Cheng, and Lim 2022) have shown that optimizing the threshold during the training of SNN can improve network performance. Can SDN approximate neuron dynamics with different threshold during the training of SpikingSSM? We demonstrate that this is feasible through an equivalence study. First, we identify some important properties of the threshold, given that both the initial membrane potential and the reset potential are 0.
+
+Property 1. The ratio of inputs and threshold determines the dynamic process of the neuron.
+
+![](images/e0eef15c927d3781c93fae42fd779b850e91f57b5bc8963f4a3689748bf8fcbb.jpg)  
+Figure 2: Comparison of membrane potential samples produced by different methods under the same input. The membrane potential predicted by the SDN (bottom) accurately approximates the ground truth produced by the spiking neuron (middle). Without reset the membrane potential significantly produces more spikes (top). The two black dashed lines denote the reset potential and the spiking threshold which are set to 0 and 1, respectively. Red points denote moments when spikes are generated, i.e. the membrane potential surpasses the threshold. Note that for the spiking neuron, the membrane potential is reset to 0 immediately once surpasses the threshold.
+
+In other words, if we scale the threshold and inputs with the same factor, the spike train will remain unchanged. Formally, if $f$ represents the dynamic process of the neuron, we have:
+
+$$
+s _ { 1 : T } = f ( I _ { 1 : T } ; v _ { \mathrm { t h } } ) = f ( \alpha I _ { 1 : T } ; \alpha v _ { \mathrm { t h } } )
+$$
+
+Property 2. The threshold scales the distribution of the input.
+
+For neurons with different threshold, the threshold functions as a scaling factor, therefore we can get a general SDN that only acts as a ’neuron’ with $v _ { \mathrm { t h } } ~ = ~ 1 . 0$ by fed scaled inputs $\frac { I _ { \mathrm { 1 : } T } } { v _ { \mathrm { t h } } }$ . Therefore, based on these properties, we can incorporate a trainable threshold for SDN by learning a scaling factor for the input.
+
+# Experiments
+
+In this section, we first introduce the architecture design, training and evaluation of SDN. In addition, we benchmark SpikingSSM assisted by SDN against traditional iterative training approaches on training speed. Next, we validate SpikingSSM on three benchmarks tasks of different scales, including classification on the sequential MNIST dataset and its permuted variant, long sequence modeling on the LRA dataset, and language modeling on the WikiText-103 dataset. Finally, we perform ablation studies of our method and analyze the computation cost of the model.
+
+# Training and Evaluation of SDN
+
+Dataset The training dataset for SDN contains the input currents and their corresponding target membrane potentials. The inputs $\in \mathcal { R } ^ { L }$ are sampled from normal distribution $N ( 0 , 1 )$ , where $L = 1 0 2 4$ is the sequence length. The ground truth membrane potentials are provided by iterative LIF neuron with hard reset. The number of training and testing samples are $1 0 ^ { 5 }$ and $1 0 ^ { 4 }$ , respectively.
+
+![](images/3465d3f2ec133aec0daa9a400745d3d0765daae6a1cdc1edac6372ef11432c17.jpg)  
+Figure 3: Training of SDN. The MSE loss and spiking accuracy on the test set are plotted here. Note that SDN already achieves sufficiently high accuracy after the first training epoch.
+
+Architecture of SDN The SDN is a 4-layer CNN constructed by 1-D convolutions and 1-D batch normalizations, denoted by $\mathrm { " C 8 k 1 s 1 p 0 g 1 - C 8 k 8 s 1 p 8 g 8 }$ -Trunc-BNrelu+C8k1s1p0g1-BN+relu-C1k1s1p0g1”, where ”C”, ”k”, ”s”, ”p” and ”g” denote output channel, kernel size, stride, padding and group, with the numbers following them indicating the value. The term ”Trunc” signifies truncating the input to maintain a constant length, and the two $\vec { \mathbf { \nabla } } \vec { \mathbf { \nabla } } + \vec { \mathbf { \nabla } } \vec { \mathbf { \nabla } }$ symbols denote the start and end of a residual connection.
+
+In this case, the total number of parameters in SDN is less than 200, which is minor compared with the backbone network. More details about the architecture are provided in the supplement material.
+
+Fitting Ability We train SDN on the generated dataset with mean square error (MSE) as the loss function for 100 epochs. For testing, we further evaluate the spiking accuracy from the predicted membrane potential by comparing with the spikes generated from the ground truth membrane potential. Fig. 3 shows that the loss of SDN converges and the model gradually attains high spiking accuracy. We also present samples of membrane potentials predicted by SDN for better illustration. As shown in Fig. 2, the membrane potential predicted by SDN closely approximates the ground truth. Without reset, the membrane potential significantly produces more spikes. Note that in some cases the network could mistakenly reset the membrane potential in a minor degree. This occasionally happens when the membrane potential is very close to the threshold, e.g. at the 3rd step. The result proves that SDN can accurately model the membrane potential dynamics of the LIF neuron. Although there is still minor difference between the predicted value and the ground truth, it has negligible impact on the final trained network performance, as demonstrated in the ablation study.
+
+Comparison on Training Speed We compare the training speed of SpikingSSM assisted by SDN with traditional training methods based on iterative LIF neurons, including BPTT and the more recent SLTT with optimized computational graph. The inputs are 1-D sequences with varying lengths of $\bar { L } = 1 K , 2 \bar { K } , 4 K ,$ $8 K$ with batch size of 64. The time measurement is done on a single GPU. As shown in Table 1, the speed up ratio using SDN amplifies with increasing sequence length, achieving two orders of acceleration at $8 K$ . Therefore, SDN extremely accelerates the training of SpikingSSM, especially for long sequences.
+
+Table 1: Comparison on training speed of different methods. The input has a batch size of 64. Training with SDN achieves significant acceleration, the speed up ratio amplifies with increasing sequence length.   
+
+<html><body><table><tr><td rowspan="2">Method</td><td colspan="4">Speed (ms)</td></tr><tr><td>L=1K</td><td>L=2K</td><td>L=4K</td><td>L=8K</td></tr><tr><td>BPTT</td><td>1370</td><td>2900</td><td>8040</td><td>25600</td></tr><tr><td>SLTT</td><td>1210</td><td>2720</td><td>7740</td><td>25600</td></tr><tr><td>Ours</td><td>183</td><td>196</td><td>200</td><td>253</td></tr><tr><td>Ratio</td><td>7.5x</td><td>15.0×</td><td>40.2×</td><td>101.2×</td></tr></table></body></html>
+
+# Long Sequence Tasks with SpikingSSM
+
+Sequential MNIST The MNIST dataset (Yann and Cortes 1998) comprises 70,000 grayscale images of handwritten digits (0-9), divided as 60,000 training and 10,000 testing images each with a size of $2 8 \times 2 8$ pixels. The sequential MNIST (sMNIST) dataset (Le, Jaitly, and Hinton 2015) is created by flattening the original 2-dimensional images into sequences of 784 elements. And the permuted sequential MNIST (psMNIST) variant (Le, Jaitly, and Hinton 2015) applied a fixed permutation to the pixels, thereby distorting the temporal structure within the sequence. As shown in table 2, SpikingSSM demonstrates competitive performance with other works on both sMNIST and psMNIST datasets.
+
+Table 2: Performance comparison of SpikingSSM and other works on sMNIST and psMNIST datasets.   
+
+<html><body><table><tr><td>Model</td><td>SNN sMNIST</td><td>psMNIST</td><td></td></tr><tr><td>LMUformer</td><td>No</td><td>99.63</td><td>98.55</td></tr><tr><td>S4 SpikingLMUformer</td><td>No Yes</td><td></td><td>98.70 97.92</td></tr><tr><td>Binary-S4D</td><td>Yes</td><td>99.4</td><td></td></tr><tr><td>S6-based SNN</td><td>Yes</td><td></td><td></td></tr><tr><td></td><td></td><td></td><td>98.4</td></tr><tr><td>SpikingSSM</td><td>Yes</td><td>99.6</td><td>98.4</td></tr></table></body></html>
+
+LRA The LRA benchmark (Tay et al. 2021b) is proposed for the purpose of benchmarking sequence models under the long-context scenario. LRA comprises six tasks featuring sequences that range from $1 K { - } 1 6 K$ steps, spanning various modalities such as visual data, mathematics experssions, and text. These tasks are designed to assess model abilities in long-context understanding including text classification, document retrieval, image classification, pathfinder, and listops. Table 3 compares SpikingSSM against both nonspiking and spiking networks with transformer or SSM architectures. The SpikingSSM adopts a similar architecture as the original S4D model with parameter initialization as in S4D-Lin (Gu et al. 2024) (architecture details are provided in the supplement material). While maintaining a level of accuracy comparable to that of the original model, the SpikingSSM achieves almost $90 \%$ of average network sparsity. Our model also demonstrates a significant performance improvement over previous SNN sequence models. Notably, SpikingSSM successfully tackles the Path-X task, a highly challenging problem that requires reasoning over long-range dependencies within sequences of length $1 2 8 \times 1 2 8$ , totaling 16,384 steps. Our SpikingSSM with a trainable threshold shows better overall performance and sparsity compared to a fixed threshold. Through further analysis, we find that the trainable threshold facilitates a bimodal distribution of the membrane potential, which reduces quantization error of spiking and improves information transmission of the SNN, consistent with previous findings (Guo et al. 2022) (details are provided in the supplement material).
+
+WikiText-103 The WikiText-103 dataset is a comprehensive collection of text from Wikipedia articles rated as Good or Featured, consisting of over 100 million tokens spanning a diverse range of topics and domains. We adopted the commonly used perplexity as the metric. Due to its composition of full articles, this dataset is particularly well-suited for models designed to capture long-term dependencies, making it a critical benchmark for word-level language modeling. In our experiments, we adopted a more parameter-efficient setup compared to the S4 model (details are provided in the supplement material). Despite utilizing significantly fewer parameters, the SpikingSSM, not only outperforms the pretrained SpikeGPT, but also substantially narrows the performance gap with ANN networks.
+
+# Ablation Study
+
+To verify the important roles of SDN, we conduct an ablation study on whether replacing LIF neurons with SDN in SpikingSSM during training causes performance degradation. In addition, as a pre-trained network, SDN has learned to model the dynamics of LIF neurons, and this bias restricts SDN to act as the LIF neuron, but does this bias really help the performance of SpikingSSM? We build three models with identical architecture and same hyperparameters, expect the spiking activation function. ’LIF’ uses the iterative LIF neuron, ’SDN-S’ uses SDN that is trained from scratch with the SpikingSSM end-to-end, and ’SDN’ uses the fixed pre-trained SDN. We train these three models on sCIFAR10 dataset (the IMAGE subset in LRA). Table 5 shows the results of these three models. The ’SDN’ model achieves comparable performance to the iterative LIF neuron and greatly accelerates training. The ’SDN- $s ^ { , }$ model fail in achieving comparable performance to ’SDN’, demonstrating that the bias of restricting SDN to act as the LIF neuron is beneficial.
+
+# Computation Cost
+
+Spiking networks are considered low energy cost because the activation of spiking neurons are binary value, and the multiplication between binary activation value and float number weight can be done via only addition operation in some neuromorphic chips, e.g., Speck(Richter et al. 2023). Therefore, the major operation synaptic Accumulation (AC)
+
+Table 3: Performance comparison of SpikingSSM and previous works on the LRA dataset. ∗Since the original S4D-Lin failed in the Path-X task, we instead present the result of another close variant S4D-Inv. -VF and -VT denote fixed and trainable threshold, respectively. Furthermore, we take the $50 \%$ accuracy for the absence of Path-X accuracy as did in the work of S4D, then compute the overall average metrics across all tasks as AVG. The spiking rate for each task have also been calculated, which is indicated by blue font.   
+
+<html><body><table><tr><td>Model</td><td>SNN</td><td>LISTOPS</td><td>TEXT</td><td>RETRIEVAL</td><td>IMAGE</td><td>PATHFINDER</td><td>Path-X</td><td>AVG</td></tr><tr><td>Transformer</td><td>No</td><td>36.37</td><td>64.27</td><td>57.46</td><td>42.44</td><td>71.40</td><td></td><td>53.66</td></tr><tr><td>LMUFormer</td><td>No</td><td>34.43</td><td>68.27</td><td>78.65</td><td>54.16</td><td>69.90</td><td></td><td>59.24</td></tr><tr><td>S4D-Lin</td><td>No</td><td>60.52</td><td>86.97</td><td>90.96</td><td>87.93</td><td>93.96</td><td>92.80*</td><td>85.52</td></tr><tr><td>SpikingLMUFormer</td><td>Yes</td><td>37.30</td><td>65.80</td><td>79.76</td><td>55.65</td><td>72.68</td><td></td><td>60.20</td></tr><tr><td>Binary S4D S6-based SNN</td><td>Yes Yes_</td><td>54.80 55.70</td><td>82.50 77.62</td><td>85.03 88.48</td><td>82.00 80.10</td><td>82.60 83.41</td><td>61.20</td><td>74.69 72.55</td></tr><tr><td>SpikingSSM-VF</td><td>Yes</td><td>59.93</td><td>82.35</td><td>88.20</td><td>86.81</td><td>93.68</td><td>94.80</td><td>84.30</td></tr><tr><td>(spiking rate)</td><td></td><td>(0.13)</td><td>(0.10)</td><td>(0.06)</td><td>(0.22)</td><td>(0.07)</td><td>(0.10)</td><td>(0.11)</td></tr><tr><td>SpikingSSM-VT</td><td>Yes</td><td>60.23</td><td>80.41)</td><td>(0.77</td><td>88.2)</td><td>93.51</td><td>9.82</td><td>84.3)</td></tr></table></body></html>
+
+Table 4: Performance comparison of SpikingSSMs with previous works on WikiText-103 dataset.   
+
+<html><body><table><tr><td>Model</td><td>SNN</td><td>PPL</td><td>Parameters</td></tr><tr><td>Transformer</td><td>No</td><td>20.51</td><td>231M</td></tr><tr><td>S4</td><td>No</td><td>20.95</td><td>249M</td></tr><tr><td>SpikeGPT</td><td>Yes</td><td>39.75</td><td>213M</td></tr><tr><td>SpikingSSM</td><td>Yes</td><td>33.94</td><td>75M</td></tr></table></body></html>
+
+Table 5: Performance comparison on the sCIFAR10 dataset.   
+
+<html><body><table><tr><td>Model</td><td>Accuracy (%)</td><td>Spiking Rate (%)</td><td>Speed (ms)</td></tr><tr><td>LIF</td><td>85.45</td><td>12.08</td><td>1480</td></tr><tr><td>SDN</td><td>85.57</td><td>11.92</td><td>230</td></tr><tr><td>SDN-S</td><td>81.52</td><td>18.30</td><td>285</td></tr></table></body></html>
+
+![](images/a22331e95e3d77022316840f0fcbc7f272f8db470b2cd18f6784b9e5b5a215f5.jpg)  
+Figure 4: Spiking rate across all layers of SpikingSSMs on the sCIFAR10 and the WikiText-103 datasets.
+
+in SNN has lower energy cost compared to the major operation Multiply-and-Accumulate (MAC) in ANN. Although the hardware implementation and the dynamics of spiking neurons are ignored, a theoretical energy consumption analysis gives an estimation of the efficiency of SNN. Refer to previous works(Richter et al. 2023; Li et al. 2024a), we assume the energy cost of MAC $E _ { \mathrm { M A C } } ~ = ~ 4 . 6 p J$ and AC $E _ { \mathrm { A C } } = 0 . 9 p J$ (Horowitz 2014).
+
+We define spiking rate as the ratio of the number of spikes to the total time steps of a neuron; the mean spiking rate of the whole network is the mean of spiking rate of all neurons in network. We denote spiking rate as the mean spiking rate. Fig. 4 shows the spiking rate of each layers. Note that the parameters and computation are mainly from the feature-mix layers, we list the MAC, AC and energy cost in these layers. For the WikiText-103 dataset with sample length $L = 8 1 9 2$ , our model has 16 layers, in which a linear layer projecting the spikes from $d = 1 0 2 4$ to $d = 2 0 4 8$ . If all projections are done via multiplication between float numbers, it contains $2 7 5 . 2 G$ MAC, and requires about $1 . 2 6 5 J$ . However, the inputs of these layers are binary numbers in our model, and the average spiking rate is less than $30 \%$ . According to the spiking rates in Fig. 4, our model contains $7 2 . 6 6 G$ AC, and requires about $6 5 . 4 0 m J$ .
+
+# Conclusion
+
+In conclusion, by hierarchically integrating the LIF neuronal dynamics with SSMs, we propose the SpikingSSM which shows competitive performance in long-sequence learning with efficient sparse computation of SNNs. For the efficient training of SNN with iterative LIF neurons, we propose a surrogate dynamic network to approximate the dynamics of LIF neurons with parallel computing, which extremely accelerates the training of SpikingSSMs. The SDN is switched to inference mode in training the task spiking networks with only negligible additional computation. We also demonstrate the versatility of SDN for approximating parametric LIF neuron models and its potential as general purpose module for parallel computing SNNs. The application of SpikingSSMs to various benchmark tasks, including the LRA and WikiText-103, not only showcase their competitive performance against previous works but also emphasizes their advantages in sparsity and low-energy requirements. This study contributes to the broader applicability of spiking neural networks, especially in fields requiring efficient processing of long sequence data.
+
+# Acknowledgments
+
+This work is supported in part by National Key Research and Development Program of China (2021YFF1200800), the National Natural Science Foundation of China (Grant No. 62276121, 12326604) and the Science and Technology Innovation 2030-Major Project (Brain Science and Brain-Like Intelligence Technology) under Grant 2022ZD0208700.

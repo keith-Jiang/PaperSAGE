@@ -1,0 +1,278 @@
+# Hybrid Decentralized Optimization: Leveraging Both First- and Zeroth-Order Optimizers for Faster Convergence
+
+Shayan Talaei1\*, Matin Ansaripour2\*, Giorgi Nadiradze3, Dan Alistarh3
+
+1Stanford University 2E´ cole Polytechnique Fe´de´rale de Lausanne (EPFL) 3Institute of Science and Technology Austria (ISTA) stalaei $@$ stanford.edu, matin.ansaripour $@$ epfl.ch, {giorgi.nadiradze, dan.alistarh} $@$ ista.ac.at
+
+# Abstract
+
+Distributed optimization is the standard way of speeding up machine learning training, and most of the research in the area focuses on distributed first-order, gradient-based methods. Yet, there are settings where some computationallybounded nodes may not be able to implement first-order, gradient-based optimization, while they could still contribute to joint optimization tasks. In this paper, we initiate the study of hybrid decentralized optimization, studying settings where nodes with zeroth-order and first-order optimization capabilities co-exist in a distributed system, and attempt to jointly solve an optimization task over some data distribution. We essentially show that, under reasonable parameter settings, such a system can not only withstand noisier zeroth-order agents but can even benefit from integrating such agents into the optimization process, rather than ignoring their information. At the core of our approach is a new analysis of distributed optimization with noisy and possibly-biased gradient estimators, which may be of independent interest. Our results hold for both convex and non-convex objectives. Experimental results on standard optimization tasks confirm our analysis, showing that hybrid first-zeroth order optimization can be practical, even when training deep neural networks.
+
+# Code — https://github.com/ShayanTalaei/HDO Extended version — https://arxiv.org/abs/2210.07703
+
+# Introduction
+
+One key enabler of the extremely rapid recent progress of machine learning has been distributed optimization: the ability to efficiently optimize over large quantities of data, and large parameter counts, among multiple nodes or devices, in order to share the computational load, and therefore reduce end-to-end training time. Distributed machine learning has become commonplace, and it is not unusual to encounter systems which distribute model training among tens or even hundreds of nodes.
+
+By and large, the standard distribution strategy in the context of machine learning tasks has been data-parallel (Bottou 2010), using first-order gradient estimators. We can formalize this as follows: considering a classical empirical risk minimization setting, we have a set of samples $S$ from a distribution, and wish to minimize the function $f : \mathbb { R } ^ { d }  \mathbb { R }$ , which is the average of losses over samples from $S$ . In other words, we wish to find $x ^ { \star } =$ argmin $\textstyle { \underset { x } { \sum } } { } _ { s \in S } f _ { s } ( x ) / | S |$ Assuming that we have $n$ compute nodes which can process samples in parallel, data-parallel SGD consists of iterations in which each node computes gradient estimator for a batch of samples, and then nodes then exchange this information, either globally, via all-to-all communication, or pair-wise. Specifically, in this paper we will focus on the highly-popular decentralized optimization case, in which nodes interact in randomly chosen pairs, exchanging model information, following each local optimization step.
+
+There is already a vast amount of literature on decentralized optimization in the case where nodes have access to first-order, gradient-based estimators. While this setting is prevalent, it does not cover the interesting case where, among the set of nodes, a fraction only have access to weaker, zeroth-order gradient estimators, corresponding to less computationally-capable devices, but which may still possess useful local data and computation.
+
+In this paper, we initiate the study of hybrid decentralized optimization in the latter setting. Specifically, we aim to answer the following key question:
+
+Can zeroth-order estimators be integrated in a decentralized setting, and can they boost convergence?
+
+Roughly, we show that the answer to this question is affirmative. To arrive at it, we must overcome a number of nontrivial technical obstacles, and the answer must be qualified by key parameters, such as the first-order/zeroth-order split in the population, and the estimator variance and bias. More precisely, a key difficulty we must overcome in the algorithm and in the analysis is the fact that, under standard implementations, zeroth-order estimators are biased, breaking one of the key analytic assumptions in existing work on decentralized optimization, e.g. (Lian et al. $2 0 1 7 \mathrm { a }$ ; Wang and Joshi 2021; Koloskova et al. 2020a,b; Nadiradze et al. 2021).
+
+Our analysis approach overcomes this obstacle and provides the first convergence bounds for hybrid decentralized optimization via a novel potential argument. Roughly, assuming a $d$ -dimensional and $L$ -smooth finite-sum objective function $f$ , and a population of $n$ nodes, in which $n _ { 1 }$ have first-order stochastic gradient estimators of variance $\sigma _ { 1 }$ , and $n _ { 0 }$ have zeroth-order estimators of variance $\sigma _ { 0 }$ , then our analysis shows that the “stochastic noise” in the convergence of our hybrid decentralized optimization algorithm in this population is given, up to constants, by the following three quantities:
+
+$$
+\frac { \eta ( d n _ { 0 } c _ { 0 } ^ { 2 } + n _ { 1 } \varsigma _ { 1 } ^ { 2 } ) } { n ^ { 2 } } , \frac { \eta ( d n _ { 0 } \sigma _ { 0 } ^ { 2 } + n _ { 1 } \sigma _ { 1 } ^ { 2 } ) } { n ^ { 2 } } , \eta ^ { 2 } \bigl ( \frac { L d n _ { 0 } } { n } \bigr ) ^ { k } .
+$$
+
+In this expression, $\eta$ is the learning rate, and the quantities $\varsigma _ { 1 }$ and $\varsigma _ { 0 }$ are bounds on the average variance of first-order and zeroth-order estimators at the nodes, respectively, given by the way in which the data is split among these two types of agents. Intuitively, the first term is the variance due to the (random) data split, whereas the second term is the added variance due to noise in the two types of gradient estimators. (The zeroth-order terms are scaled by the dimension, as is common in this case.) The third term bounds the bias induced by the zeroth-order gradient estimators, where $k$ equals 1 for the convex case and 2 for the non-convex case. Using this characterization, we show that there exist reasonable parameter settings such that, if zeroth-order nodes do not have extremely high variance, they may in fact be useful for convergence, especially since the third bias term can be controlled via the learning rate $\eta$ .
+
+Our analysis approach should be of independent interest: first, we provide a simple and general way of characterizing convergence in a population mixing first- and zerothorder agents, which can be easily parametrized given population and estimator properties, for both convex and nonconvex objectives. (For instance, we can directly cover the case when the zeroth-order estimators are unbiased (Chen 2020) as in this case the bias term becomes zero.) Second, we do so in a very general communication model which allows agents to interact at different rates (due to randomness), covering both the pair-wise interaction model (Angluin et al. 2006; Nadiradze et al. 2021) and the global matching interactions model (Lian et al. 2017a; Wang and Joshi 2021; Koloskova et al. 2020a,b).
+
+A key remaining question is whether the above characterization can be validated for practical setting. For this, we implemented our algorithm and examined the convergence under various optimization tasks, population relative sizes, and estimator implementations. Specifically, we implemented three different types of zeroth-order estimators: a standard biased one, e.g. (Nesterov and Spokoiny 2017), a de-biased estimator (Chen 2020), and the novel gradientfree estimator of (Baydin et al. 2022), and examined their behavior when mixed with first-order estimators. In brief, our results show that, even for high-dimensional and complex tasks, such as fine-tuning the ResNet-18 (He et al. 2015), or a Transformer model (Vaswani et al. 2023), our approach continues to converge. Importantly, we observe that our approach allows a system to incorporate information from the zeroth-order agents in an efficient and robust, showing higher convergence speed relative to the case where only first-order information is considered for optimization.
+
+Related Work. The study of decentralized optimization algorithms dates back to Tsitsiklis (1984), and is related to the study of gossip algorithms for information dissemination (Kempe, Dobra, and Gehrke 2003; Xiao and Boyd 2004). The distinguishing feature of this setting is that optimization occurs jointly, but in the absence of a coordinator node. Several classic first-order algorithms have been ported and analyzed in the gossip setting, such as subgradient methods for convex objectives (Nedic and Ozdaglar 2009; Johansson, Rabi, and Johansson 2009; Shamir and Srebro 2014) or ADMM (Wei and Ozdaglar 2012; Iutzeler et al. 2013). References (Lian et al. 2017a,b; Assran et al. 2018) consider SGD-type algorithms in the non-convex setting, while references (Tang et al. 2018; Koloskova et al. 2020a; Nadiradze et al. 2021) analyzed the use of quantization in the gossip setting. By contrast, zeroth-order optimization has been relatively less investigated: Sahu and Kar (2020) proposes a distributed deterministic zeroth-order Frank-Wolfe-type algorithm, whereas other works by (Yuan et al. 2024) and (Mhanna and Assaad 2023) investigated the rates which can be achieved by decentralized zerothorder algorithms, proposing multi-stage methods which can match the rate of centralized algorithms in some parameter regimes. Relative to the latter reference, we focus on simpler decentralized algorithms, which can easily interface with first-order optimizers, and perform a significantly more in-depth experimental validation.
+
+Stochastic zeroth-order optimization has been classically applied for gradient-free optimization of convex functions, e.g. (Nesterov and Spokoiny 2017), and has been extended to tackling high-dimensionality and saddle-point constraints, e.g. (Balasubramanian and Ghadimi 2022). (The area has tight connections to bandit online optimization, under time-varying objective functions, e.g. (Flaxman, Kalai, and McMahan 2004; Agarwal, Dekel, and Xiao 2010; Shamir 2017); however, our results are not immediately relevant to this direction, as we are interested in interactions with agents possessing first-order information as well.) In this paper, we also investigate improved single-point function evaluation for better gradient estimation (Jongeneel, Yue, and Kuhn 2021) as well as the forward-mode unbiased estimator of Baydin et al. (2022).
+
+# Preliminaries
+
+# The System Model
+
+We consider a standard model for the decentralized optimization setting, which is similar to (Koloskova et al. 2020a,b; Lian et al. $2 0 1 7 \mathrm { a }$ ; Nadiradze et al. 2021). Specifically, we have $n \geq 2$ agents, of which $n _ { 0 }$ agents have zerothorder gradient oracles, and $n _ { 1 }$ have first-order gradient oracles. (We describe the exact optimization setup in the next section.) Beyond their oracle type, the agents are assumed to be anonymous for the purposes of the protocol. The execution will proceed in discrete steps, or rounds, where in each step, two agents are chosen to interact, uniformly at random. Specifically, when chosen, each agent performs some local computation, e.g. obtains some gradient information from their local oracle. Then, the two agents exchange parameter information, and update their local models, after which they are ready to proceed to the next round. Notice that this random interaction model is asynchronous, in the sense that the number of interactions taken by agents up to some point in time may be different, due to randomness. The basic unit of time used in the analysis, which we call fine-grained time, will be the total number of interactions among agents up to some given point in the execution. To express global progress, we will consider parallel time, which is the average number of interactions up to some point, and can be obtained by dividing by $n$ the total number of interactions. This corresponds to the intuition that $\Theta ( n )$ interactions may occur in parallel. In experiments, we will examine the convergence of the local model at a fixed node.
+
+This model is an instantiation of the classic population model of distributed computing (Angluin et al. 2006), in an optimization setting. The model is similar to the one adopted by Nadiradze et al. (2021) for analyzing asynchronous decentralized SGD, and is more general than the ones adopted by Koloskova et al. (2020a,b); Lian et al. (2017a); Wang and Joshi (2021) for decentralized analysis, since the latter assume that nodes are paired via perfect global random matchings in each round. (Our analysis would easily extend to global matching, yielding virtually the same results.)
+
+# Optimization Setup
+
+We assume each node $\mathbf { \chi } _ { i }$ has a local data distribution ${ \mathcal { D } } ^ { i }$ , and that the loss function corresponding to the samples at node $i$ , denoted by $f ^ { i } ( x ) : \mathbb { R } ^ { \mathbf { \bar { d } } } \ \to \ \mathbf { \bar { R } }$ can be approximated using its stochastic form $F ^ { i } ( x , \xi ^ { i } )$ for each parameter $\boldsymbol { x } \in \mathbb { R } ^ { \boldsymbol { \tilde { d } } }$ and (randomly chosen) sample $\xi ^ { i } \sim \mathcal { D } ^ { i }$ , where $f ^ { i } ( x ) = \mathbb { E } _ { \xi ^ { i } \sim \mathcal { D } ^ { i } } \left[ F ^ { i } ( x , \xi ^ { i } ) \right]$ . For simplicity of notation, we assume that nodes in the set $N _ { 0 } = \{ 1 , 2 , . . . , n _ { 0 } \}$ are zerothorder nodes and the nodes in the set $N _ { 1 } = [ n ] / N _ { 0 }$ are firstorder nodes. Let $n _ { 0 }$ and $n _ { 1 }$ be the sizes of the sets $N _ { 0 }$ and $N _ { 1 }$ correspondingly.
+
+In this setup nodes communicate to solve a distributed stochastic optimization problem, i.e.
+
+$$
+f ^ { * } = \underset { x \in \mathbb { R } ^ { d } } { m i n } \Big [ f ( x ) : = \frac { 1 } { n _ { 0 } } \sum _ { i \in N _ { 0 } } f ^ { i } ( x ) + \frac { 1 } { n _ { 1 } } \sum _ { i \in N _ { 1 } } f ^ { i } ( x ) \Big ] .
+$$
+
+This means that we wish to optimize the function $f$ which corresponds to the loss over all data samples. Since in the analysis we will wish to throttle the ratio of zeroth-order to first-order agents, we split the entire data among zerothorder nodes, and we do the same thing for the first-order nodes. (Our analysis can be extended to settings where this is not the case, but this will allow us for instance to study what happens when either $n _ { 0 }$ or $n _ { 1 }$ goes to zero, without changing our objective function.) We make the following assumptions on the optimization objectives:
+
+Assumption 1 (Strong convexity). We assume that the function $f$ is strongly convex with parameter $\ell > 0$ , i.e. for all x, y Rd:
+
+$$
+( x - y ) ^ { T } ( \nabla f ( x ) - \nabla f ( y ) ) \geq \ell \Vert x - y \Vert ^ { 2 } .
+$$
+
+Assumption 2 (Smooth gradient). All the stochastic gradients $\nabla \bar { F } ^ { i }$ are $L$ -Lipschitz for some constant $L > 0$ , i.e. for all $\xi ^ { i } \sim \mathcal { D } ^ { i }$ and $x , y \in \mathbb { R } ^ { d }$ :
+
+$$
+\| \nabla F ^ { i } ( x , \xi ^ { i } ) - \nabla F ^ { i } ( y , \xi ^ { i } ) \| \leq L \| x - y \| .
+$$
+
+If in addition $F ^ { i }$ are convex functions, then
+
+$$
+\begin{array} { r l } & { \| \nabla F ^ { i } ( x , \xi ^ { i } ) - \nabla F ^ { i } ( y , \xi ^ { i } ) \| \leq } \\ & { \qquad 2 L ( F ^ { i } ( x , \xi ^ { i } ) ) - F ^ { i } ( y , \xi ^ { i } ) - \langle x - y , \nabla F ^ { i } ( y , \xi ^ { i } ) \rangle ) . } \end{array}
+$$
+
+Using Assumption 2, one can easily find that the gradients of $f$ and $f ^ { i } ( x ) { \bar { \forall i } } \in [ n ]$ are also satisfying the above inequalities. Further, we make the following assumptions about the data split and the stochastic gradient estimators:
+
+Assumption 3 (Balanced data distribution). The average variance of $\nabla f ^ { i } ( x ) s$ for both zero and first order nodes is bounded by a global constant values, i.e. for all $\boldsymbol { x } \in \mathbb { R } ^ { d }$ :
+
+$$
+\begin{array} { r l r } & { } & { \displaystyle \frac { 1 } { n _ { 0 } } \sum _ { i \in N _ { 0 } } \| \nabla f ^ { i } ( x ) - \nabla f ( x ) \| ^ { 2 } \leq \varsigma _ { 0 } ^ { 2 } ; } \\ & { } & { \displaystyle \frac { 1 } { n _ { 1 } } \sum _ { i \in N _ { 1 } } \| \nabla f ^ { i } ( x ) - \nabla f ( x ) \| ^ { 2 } \leq \varsigma _ { 1 } ^ { 2 } . } \end{array}
+$$
+
+Assumption 4 (Unbiasedness and bounded variance). For each i, $\mathsf { \bar { V } } F ^ { i } ( x , \xi ^ { i } )$ is an unbiased estimator of $\nabla f ^ { i } ( x )$ and its variance is bounded by a constant $s _ { i } ^ { 2 }$ , i.e. for all $\boldsymbol { x } \in \mathbb { R } ^ { d }$ :
+
+$$
+\begin{array} { r l } & { \mathbb { E } _ { \xi ^ { i } \sim \mathcal { D } ^ { i } } [ \nabla F ^ { i } ( x , \xi ^ { i } ) ] = \nabla f ^ { i } ( x ) ; } \\ & { \mathbb { E } _ { \xi ^ { i } } \| \nabla F ^ { i } ( x , \xi ^ { i } ) - \nabla f ^ { i } ( x ) \| \le s _ { i } ^ { 2 } . } \end{array}
+$$
+
+Each node has access to an estimator $G ^ { i } ( x )$ that estimates the local gradient $\nabla f ^ { i } ( x )$ at point $x$ . For nodes which can perform the gradient computation over a batch of data, i.e. first-order nodes, $G ^ { i } ( x )$ is $\nabla F ^ { i } ( x , \xi ^ { i } )$ , where $\xi ^ { i } \sim \mathcal { D } ^ { i }$ .
+
+Definition 1. We define the average of $s _ { i }$ for the zeroth and first order populations as $\sigma _ { 0 } ^ { 2 }$ and $\bar { \sigma } _ { 1 } ^ { 2 }$ respectively. Formally, we define
+
+$$
+\sigma _ { 0 } ^ { 2 } : = \frac { 1 } { n _ { 0 } } \sum _ { i \in n _ { 0 } } s _ { i } ^ { 2 } , \quad \sigma _ { 1 } ^ { 2 } : = \frac { 1 } { n _ { 1 } } \sum _ { i \in n _ { 1 } } s _ { i } ^ { 2 } .
+$$
+
+# Zeroth-order Optimization
+
+We now provide a brief introduction relative to standard basic facts and assumptions concerning zeroth-order optimization. Let the function $f _ { \nu } ^ { i } ( x ) : = \mathbb { E } _ { u } ^ { \setminus } [ f ^ { i } ( x + \nu u ) ] ,$ $u \sim$ $N ( 0 , I _ { d } )$ be the smoothed version of each function ${ \dot { J } } ^ { i } ( x )$ . Then, node $i$ can estimate the gradient of $f _ { \nu } ^ { i }$ by only evaluating some points of $f ^ { i }$ .
+
+Definition 2 (Zeroth-order estimator).
+
+$$
+G _ { \nu } ^ { i } ( x , u , \xi ^ { i } ) = \frac { F ^ { i } ( x + \nu u , \xi ^ { i } ) - F ^ { i } ( x , \xi ^ { i } ) } { \nu } u ,
+$$
+
+where $u \sim N ( 0 , I _ { d } )$ and $\xi ^ { i } \sim \mathcal { D } ^ { i }$ .
+
+Note that under Assumption 4, one can easily prove that $G _ { \nu } ^ { i } ( x , u , \xi ^ { i } )$ is an unbiased estimator of $\nabla f _ { \nu } ^ { i }$ since
+
+$$
+\begin{array} { r l } & { \mathbb { E } _ { u , \xi ^ { i } } [ G _ { \nu } ^ { i } ( x , u , \xi ^ { i } ) ] = \mathbb { E } _ { u } [ \frac { f ^ { i } ( x + \nu u ) - f ^ { i } ( x ) } { \nu } u ] } \\ & { \qquad = \nabla f _ { \nu } ^ { i } ( x ) . } \end{array}
+$$
+
+As a technical note, in our analysis we will set $\begin{array} { r } { \nu : = \frac { \eta } { c } } \end{array}$ , where $\eta$ is the learning rate and $c$ is a constant to be defined later. Therefore, for simplicity we can define $G ^ { i } ( x ) : =$
+
+$G _ { \nu } ^ { i } ( x , u , \xi ^ { i } )$ , where $G _ { \nu } ^ { i } ( x , u , \xi )$ is as defined in Definition 2 and $\begin{array} { r } { \nu = \frac { \eta } { c } } \end{array}$ . Since zeroth-order nodes cannot perform gradient computation directly, we use this $G ^ { i } ( x )$ as their gradient estimator. We restate the following well-known fact:
+
+Lemma 1 ((Nesterov and Spokoiny 2017), Theorem 1.1 in (Balasubramanian and Ghadimi 2022)). For a Gaussian random vector $u \sim N ( 0 , I _ { d } )$ we have that
+
+$$
+\mathbb { E } [ \| u \| ^ { k } ] \leq ( d + k ) ^ { k / 2 }
+$$
+
+for any $k \geq 2$ . Moreover, the following statements hold for any function $f$ whose gradient is Lipschitz continuous with constant $L$ .
+
+a) The gradient of $f _ { \nu }$ is Lipschitz continuous with constant $L _ { \nu }$ such that $L _ { \nu } \leq L$ .   
+$b$ ) For any $\boldsymbol { x } \in \mathbb { R } ^ { d }$ ,
+
+$$
+\begin{array} { c } { \displaystyle { | f _ { \nu } ( x ) - f ( x ) | \le \frac { \nu ^ { 2 } } { 2 } L d , } } \\ { \displaystyle { \| \nabla f _ { \nu } ( x ) - \nabla f ^ { i } ( x ) \| \le \frac { \nu } { 2 } L ( d + 3 ) ^ { \frac { 3 } { 2 } } . } } \end{array}
+$$
+
+$c$ ) For any $\boldsymbol { x } \in \mathbb { R } ^ { n }$ ,
+
+$$
+\begin{array} { r } { \displaystyle \frac { 1 } { \nu ^ { 2 } } \mathbb { E } _ { u } [ \{ f ( x + \nu u ) - f ( x ) \} ^ { 2 } \| u \| ^ { 2 } ] \leq } \\ { \displaystyle \frac { \nu ^ { 2 } } { 2 } L ^ { 2 } ( d + 6 ) ^ { 3 } + 2 ( d + 4 ) \| \nabla f ( x ) \| ^ { 2 } . } \end{array}
+$$
+
+# The HDO Algorithm
+
+Algorithm Description. We now describe a decentralized optimization algorithm, designed to be executed by a population of $n$ nodes, interacting in pairs chosen uniformly at random as per our model. We assume that $n _ { 1 }$ of the nodes have access to first-order estimators and $n _ { 0 }$ of them have access to zeroth-order estimators, hence $n = n _ { 1 } + n _ { 0 }$ . Two copies of the training data are distributed, once among the first-orders and once among the zeroth-orders. Thus, each first- and zeroth-order node has access to $\begin{array} { r } { \frac { 1 } { n _ { 1 } } , \frac { 1 } { n _ { 0 } } } \end{array}$ of the entire training data, respectively. We assume that each node $i$ has access to a local stochastic estimator of the gradient, which we denote by $G ^ { i }$ , and maintains a model estimate $X ^ { i }$ , as well as the global learning rate $\eta$ . Without loss of generality, we assume that the models are initialized to the same randomly-chosen point. Specifically, upon every interaction, the interacting agents $i$ and $j$ perform the following steps:
+
+Algorithm 1: HDO pseudocode for each interaction between randomy chosen nodes $i$ and $j$   
+
+<html><body><table><tr><td>// Nodes perform local steps. Xi←Xi-nGi(X²); Xj←Xj-nGj(Xə); avg← (Xi+Xj)/2;</td><td>// Nodes average their local models.</td></tr></table></body></html>
+
+In a nutshell, upon each interaction, each node first performs a local model update based on its estimator, and then nodes average their local models following the interaction. We do not distinguish between estimator types in this interaction. The nodes are then ready to proceed to the next round.
+
+# The Convergence of the HDO Algorithm
+
+This section is dedicated to proving that the following result
+
+Theorem 1. Assume an objective function $f : \mathbb { R } ^ { d }  \mathbb { R } ,$ equal to the average loss over all data samples, wh e optimum $x ^ { * }$ we are trying to find using Algorithm 1. Let $n _ { 0 }$ be the number of zeroth-order nodes, and $n _ { 1 }$ be the number of first-order agents. Given the data split described in the previous section, let $f _ { i }$ be the local objective function of node i. Assume that zeroth-order nodes use estimators with $\nu = \textstyle { \frac { \eta } { \sqrt { d } } }$ . Let the total number of steps in the algorithm $T$ and $\textstyle \mu _ { t } ^ { - } = \sum _ { i = 1 } ^ { n } X _ { t } ^ { i } / n$ , then we can derive the following convergen  rates.
+
+Non-Convex: Under assumptions 2, 3 and 4, and letting $T$ be large enough such that $\begin{array} { r l } { T } & { { } = } \end{array}$ $\begin{array} { r } { \Omega \left( \operatorname* { m a x } \left\{ \frac { \bar { L ^ { 2 } } ( d n _ { 0 } + n _ { 1 } ) ^ { 2 } } { d n ^ { 2 } } , n ^ { 2 } L ^ { 2 } , n n _ { 0 } ^ { 3 } \bar { d } \right\} \right) } \end{array}$ , we have
+
+$$
+\begin{array} { l } { \displaystyle \frac { 1 } { T } \sum _ { t = 0 } ^ { T - 1 } \mathbb { E } \| \nabla f ( \mu _ { t } ) \| ^ { 2 } = \sqrt { \frac { d } { T } } \times O \Bigg ( ( f ( \mu _ { 0 } ) - f ^ { * } ) + } \\ { \displaystyle L \big ( \frac { d n _ { 0 } \varsigma _ { 0 } ^ { 2 } + n _ { 1 } \varsigma _ { 1 } ^ { 2 } } { n d } \big ) + L \big ( \frac { d n _ { 0 } \sigma _ { 0 } ^ { 2 } + n _ { 1 } \sigma _ { 1 } ^ { 2 } } { n d } \big ) + L ^ { 2 } \sqrt { \frac { n _ { 0 } } { n } } \Bigg ) . } \end{array}
+$$
+
+Adding, convexity (Assumption $\jmath$ ), we prove the following:
+
+Strongly Convex: If we assume that the functions $f$ and $f _ { i }$ satisfy Assumptions $^ { l }$ , 2, 3 and 4, and let $T$ be large enough such that $\begin{array} { r } { \frac { T } { \log T } = \Omega \left( \frac { n ( d + n ) ( L + 1 ) \left( \frac { 1 } { \ell } + 1 \right) } { \ell } \right) } \end{array}$ , and let the learning rate be $\begin{array} { r } { \eta = \frac { 4 n \log T } { T \ell } } \end{array}$ . For $1 \leq t \leq T$ , let the sequence of weights $\boldsymbol { w } _ { t }$ be given by $\begin{array} { r } { w _ { t } = \left( 1 - \frac { \eta \ell } { 2 n } \right) ^ { - t } } \end{array}$ and let $\begin{array} { r } { S _ { T } = \sum _ { t = 1 } ^ { T } w _ { T } } \end{array}$ . Finally, define $\begin{array} { r } { y _ { T } = \sum _ { t = 1 } ^ { T } \frac { w _ { t } \mu _ { t - 1 } } { S _ { T } } } \end{array}$ wtµt−1 to be the mean over local model parameters Then, we can show that HDO provides the following convergence rate:
+
+$$
+\begin{array} { r l } & { \mathbb { E } [ f ( y _ { T } ) - f ( x ^ { * } ) ] + \frac { \ell \mathbb { E } \| \mu _ { T } - x ^ { * } \| ^ { 2 } } { 8 } } \\ & { \quad = O \Bigg ( \frac { L \| \mu _ { 0 } - x ^ { * } \| ^ { 2 } } { T \log T } + \frac { \log ( T ) ( d n _ { 0 } \varsigma _ { 0 } ^ { 2 } + n _ { 1 } \varsigma _ { 1 } ^ { 2 } ) } { T \ell n } } \\ & { \qquad + \frac { \log ( T ) ( d n _ { 0 } \sigma _ { 0 } ^ { 2 } + n _ { 1 } \sigma _ { 1 } ^ { 2 } ) } { T \ell n } + \frac { \log ( T ) d n _ { 0 } } { T \ell n } \Bigg ) . } \end{array}
+$$
+
+Speedup. Here, the time $T$ refers to the total number of interactions among agents, as opposed to parallel time, corresponding to the average number of interactions $T / n$ . These rates are reminiscent of sequential SGD. However, there are some distinctions: we are counting the total number of gradient oracle queries by the nodes, and there are some additional trailing terms, whose meanings we discuss below.
+
+We interpret this formula from the perspective of an arbitrary local model. For this, notice that the notion of parallel time corresponding to the number of total interactions $T$ , which is by definition $T _ { p } = T / n$ , corresponds (up to constants) to the average number of interactions and gradient oracle queries performed by each node up to time $T$ . Therefore, in the strongly convex setup, for any single model, convergence with respect to its number of performed SGD steps $T _ { p }$ would be $O ( \log ( n T _ { p } ) / ( n T _ { p } ) )$ (assuming all parameters are constant), which would correspond to $\begin{array} { r } { \Omega ( \frac { n } { \log ( n T _ { p } ) } ) \ = } \end{array}$ $\Omega \big ( \frac { n } { \log ( T ) } \big )$ speedup compared to a variant of sequential SGD. Notice that this is quite favorable to our algorithm, since we are considering biased zeroth-order estimators for some of the nodes in the population. Hence, assuming that $T$ is polynomial in $n$ , we get an almost-linear speedup of $\begin{array} { r } { \Omega \left( \frac { \bar { n } } { \log ( n ) } \right) } \end{array}$ Similarly, in the non-convex case, we get a speedup $\Omega ( { \sqrt { n } } )$ , which shows the scalability of our algorithm.
+
+Impact of Zeroth-Order Nodes. Notice that our convergence bounds cleanly separate in the terms which come from zeroth-order nodes and terms which come from first-order nodes. For $n _ { 0 } = 0$ , we get asymptotically the same bound as we would get if all nodes performed pure first-order SGD steps. Similarly, when $n _ { 0 } = n$ we should be able to achieve asymptotically-optimal convergence for biased zeroth-order estimators. Further, notice that, if the bias is negligible, then the last term in each of the upper bounds disappears, and we obtain a trade-off between two populations with different variances. We can also observe the following theoretical threshold: we asymptotically match the convergence rate in the case with all nodes performing SGD steps, as long as $d n _ { 0 } = O ( n )$ (assuming all other parameters are constant).
+
+# Analysis
+
+As an example, we discuss the proof overview for the strongly convex case. The notations and proof steps are closely aligned with those used in the non-convex case.
+
+Proof Overview. The convergence proof, given in full in the Appendix, can be split conceptually into two steps. The first aims to bound the variance of the local models $\cdot X _ { t } ^ { i }$ for each time step $t$ and node $i$ with respect to the mean $\mu _ { t } =$ $\textstyle \sum _ { i } X _ { t } ^ { i }$ . It views this variance as a potential $\Gamma _ { t }$ , which as we show has supermartingale-like behavior for small enough learning rate: specifically, this quantity tends to increase due to gradient steps, but is pushed towards the mean $\mu _ { t }$ by the averaging process.
+
+The key component here is Lemma 2, which carefully bounds the evolution of the potential at a step, by modeling optimization as a dynamic load balancing process: each interaction corresponds to a weight generation step (in which gradient estimators are generated) and a load balancing step, in which the “loads” of the two nodes (corresponding to their model values) are balanced through averaging.
+
+In the second step, we first bound the rate at which the mean $\mu _ { t }$ converges towards $x ^ { * }$ , where we crucially (and carefully) leverage the variance bound obtained above. The main challenge in this part is dealing with biased zerothorder estimators. In fact, even dealing with biased first-order estimators is not trivial, since for example, they are the main reason for the usage of error feedback when stochastic gradients are compressed using biased quantization (Alistarh et al. 2018). This is our second key technical result.
+
+With this in hand, we can complete the proof by applying a standard argument which characterizes the rate at which $\mathbb { E } [ f ( y _ { T } ) - f ( x ^ { * } ) ]$ and $\mathbb { E } [ \| \mu _ { t } - x ^ { * } \| ^ { 2 }$ converge towards 0.
+
+Notation and Preliminaries. In this section, we provide a more in-depth sketch of the analysis of the HDO protocol. We begin with some notation. Recall that $n$ is the number of nodes, split into first-order $( n _ { 1 } )$ and zeroth-order $( n _ { 0 } )$ . We will analyze a sequence of time steps $t = 1 , 2 , \dots , T$ , each corresponding to an individual interaction between two nodes, which are usually denoted by $i$ and $j$ .
+
+Step 1: Parameter Concentration. Next, let $X _ { t }$ be a vector of model estimates at time step $t$ , that is $X _ { t } ~ =$ $( X _ { t } ^ { 1 } , X _ { t } ^ { 2 } , . . . , X _ { t } ^ { n } )$ . Also, let $\mu _ { t } ~ = ~ { \textstyle { \frac { 1 } { n } } } \sum _ { i = 1 } ^ { n } X _ { t } ^ { i }$ , be an average estimate at time step $t$ . The following potential function measures the variance of the models:
+
+$$
+\Gamma _ { t } = \frac { 1 } { n } \sum _ { i = 1 } ^ { n } \| X _ { t } ^ { i } - \mu _ { t } \| ^ { 2 } .
+$$
+
+With this in place, one of our key technical results is to provide a supermartingale-type bound on the evolution of the potential $\Gamma _ { t }$ , in terms $\eta$ , and average second moment of estimators at step $t$ , defined as $\begin{array} { r } { M _ { t } ^ { G } : = \frac { 1 } { n } \sum _ { i } \left. G ^ { i } ( X _ { t } ^ { i } ) \right. ^ { 2 } } \end{array}$ .
+
+Lemma 2. For any time step $t$ :
+
+$$
+\mathbb { E } \left[ \Gamma _ { t + 1 } \right] \leq \left( 1 - \frac { 1 } { 2 n } \right) \mathbb { E } \left[ \Gamma _ { t } \right] + \frac { 4 } { n } \eta ^ { 2 } \mathbb { E } \left[ M _ { t } ^ { G } \right] .
+$$
+
+Notice that, if we had a universal second moment bound on the estimators, that is, for any vector $X$ and node $i$ $\mathbb { E } \left\| G ^ { i } ( X ) \right\| ^ { 2 } \leq M$ , for some $M > 0$ , then we would be able to
+unroll th
+e recursion, and, for any $t \geq 0$ upper bound $E [ \Gamma _ { t } ]$ by $\eta ^ { 2 } M ^ { 2 }$ . In the absence of such upper bound we must derive the following upper bound on $\dot { \mathbb { E } } \left[ M _ { t } ^ { G } \right]$ :
+
+Lemma 3. Assume $\begin{array} { r } { \nu : = \frac { \eta } { c } } \end{array}$ is fixed, where $\eta$ and $c$ are the learning rate and a constant respectively. Then, for any time step t we have:
+
+$$
+\begin{array} { l } { \displaystyle \mathbb { E } \left[ M _ { t } ^ { G } \right] \leq 6 ( d + 4 ) L ^ { 2 } \mathbb { E } [ \Gamma _ { t } ] + \frac { 6 ( d + 4 ) n _ { 0 } \varsigma _ { 0 } ^ { 2 } + 3 n _ { 1 } \varsigma _ { 1 } ^ { 2 } } { n } } \\ { \displaystyle \qquad + 6 ( 2 d + 9 ) L \mathbb { E } [ f ( \mu _ { t } ) - f ( x ^ { * } ) ] } \\ { \displaystyle \qquad + \frac { 2 ( d + 4 ) \sum _ { i \in N _ { 0 } } s _ { i } ^ { 2 } + \sum _ { i \in N _ { 1 } } s _ { i } ^ { 2 } } { n } } \\ { \displaystyle \qquad + \eta ^ { 2 } \frac { n _ { 0 } } { 2 n c ^ { 2 } } L ^ { 2 } ( d + 6 ) ^ { 3 } . } \end{array}
+$$
+
+First, we check how this upper bound affects the upper bound given by Lemma 2. For small enough $\eta$ , the term containing $\mathbb { E } [ \dot { \Gamma _ { t } } ]$ (which comes from the upper bound on $\mathbb { E } \left[ M _ { t } ^ { G } \right] \mathrm { : }$ ) can be upper bounded by $\textstyle { \frac { 1 } { 4 n } } \operatorname { \mathbb { E } } [ \Gamma _ { t } ]$ , and hence it will just change the factor in front of $\mathbb { E } [ \Gamma _ { t } ]$ to $( 1 - 1 / 4 n )$ .
+
+Second, since the above bound contains the term with $\mathbb { E } [ f ( \mu _ { t } ) - f ( x ^ { * } ) ]$ we are not able to bound the potential $\Gamma$ per step, instead, for weights $\begin{array} { r } { w _ { t } = ( 1 - \frac { \eta \ell } { 2 n } ) ^ { - t } } \end{array}$ , we can uAppernbdoixu)n.d $\begin{array} { r } { \sum _ { t = 1 } ^ { T } w _ { t } \operatorname { \mathbb { E } } [ \Gamma _ { t - 1 } ] } \end{array}$ t(ypilseatshea tsteheeLuepmpemrab?o?uind ohne the weighted sum $\begin{array} { r } { \sum _ { t = 1 } ^ { T } \overline { { w _ { t } \mathbb { E } [ \Gamma _ { t - 1 } ] } } , } \end{array}$ , is
+
+$$
+O ( \eta ^ { 2 } \sum _ { t = 1 } ^ { T } w _ { t } \mathbb { E } [ f ( \mu _ { t - 1 } ) - f ( x ^ { * } ) ] ) + \sum _ { t = 1 } ^ { T } w _ { t } O ( \eta ^ { 2 } ) .
+$$
+
+(for simplicity, above we assumed that all other parameters are constant.)
+
+Step 2: Convergence of the Mean and Risk Bound. The above result allows us to characterize how well the individual parameters are concentrated around their mean. In turn, this will allow us to provide a recurrence for how fast the parameter average is moving towards the optimum. To help with the intuition, we provide the lemma which is simplified version of the one given in the additional material:
+
+Lemma 4. For small enough $\eta$ and $t \geq 1$ we have that:
+
+$$
+\begin{array} { r l r } {  { \mathbb { E } \| \mu _ { t } - x ^ { * } \| ^ { 2 } \leq ( 1 - \frac { \ell \eta } { 2 n } ) \mathbb { E } \| \mu _ { t - 1 } - x ^ { * } \| ^ { 2 } } } \\ & { } & { \quad - \Omega ( \frac { \eta } { n } ) \mathbb { E } [ f ( \mu _ { t - 1 } ) - f ( x ^ { * } ) ] } \\ & { } & { \quad + O ( \frac { \eta } { n } ) \mathbb { E } [ \Gamma _ { t - 1 } ] + O ( \frac { \eta ^ { 2 } } { n ^ { 2 } } ) . } \end{array}
+$$
+
+Note that $O$ and $\Omega$ hide all other parameters (we assume that all other parameters are constant). As mentioned, the main challenge in the proof of this lemma is taking care of biased zeroth-order estimators.
+
+Recall that $\begin{array} { r } { w _ { t } = ( 1 - \frac { \eta \ell } { 2 n } ) ^ { - t } } \end{array}$ , by definition. We proceed by multiplying both sides of the above inequality by $\boldsymbol { w } _ { t }$ and then summing it up for $1 \leq t \leq T$ . Then, once we plug the upper bound on $\begin{array} { r } { \sum _ { t = 1 } ^ { T } w _ { t } \operatorname { \mathbb { E } } [ \Gamma _ { t - 1 } ] } \end{array}$ , for small enough $\eta$ the term ${ \cal O } ( { \textstyle \frac { \eta } { n } } ) { \cal O } ( \eta ^ { 2 } \sum _ { t = 1 } ^ { T } w _ { t } \mathbb { E } [ f ( \mu _ { t - 1 } - f ( x ^ { * } ) ] )$ vanishes as it is dominated by the term $\begin{array} { r l } { \mathrm { ~ } } & { { } - \sum _ { t = 1 } ^ { T } \Omega ( \frac { \eta } { n } ) \mathbb { E } \left[ f ( \mu _ { t - 1 } ) - \right. } \end{array}$ $f ( x ^ { * } ) ]$ .
+
+We get the final convergence bound after some simple calculations involving division of both sides by $S _ { T } =$ $\textstyle \sum _ { t = 1 } ^ { T } w _ { t }$ , and using 4nlog(T ) together with the upper bound on $T$ (in turn, this makes sure that $\eta$ is small enough, so that all upper bounds we mentioned hold).
+
+# Experimental Results
+
+Experimental Setup and Goals. In this section, we validate our results by simulating the HDO algorithm under different conditions, including varying the number of nodes, the ratios between first-order (FO) and zeroth-order (ZO) nodes, and the ”strength” of the zeroth-order gradient estimators. Our focus is on the algorithm’s convergence behavior, relative to the total number of optimization steps, which we measure by tracking the loss over time or the accuracy on the hidden validation set. Our goal is to determine whether a hybrid system, combining both FO and ZO agents, can achieve better convergence compared to a system that relies on a single type of agent. Additionally, we aim to demonstrate the convergence speed, in terms of training loss at a fixed node, for different sizes of mono-type populations, each consisting of only one type of estimator.
+
+![](images/c500079e4c2329d68ea05ba372748680acdb3674112511094cff6a61ba124ff7.jpg)  
+Figure 1: Number of random vectors (rv) impact on the biased/unbiased ZO estimators Accuracy (Acc), using a CNN model on MNIST.
+
+![](images/82581dc2c27bd400e2232fa5e9c3c22c75c7592abc5808cb3195a9cbb90139ec.jpg)  
+Figure 2: Validation loss vs. various population configurations for regression model on MNIST.
+
+In the implementation of HDO, each step involves nodes updating their models, followed by the formation of $O ( n )$ random disjoint pairs. Each pair exchanges their models and replaces their own with the averaged model. To demonstrate the effectiveness of zeroth-order nodes under reasonable parameter settings, we evaluate the mean validation loss and accuracy across all nodes and analyze the consensus of the models by measuring the standard deviation of losses. Additional details on the models, datasets, and the complete experimental setup are provided in the Appendix.
+
+Results. At first, we examine the performance of individual zeroth-order gradient estimators (with $\nu = 1 0 ^ { - 4 }$ ) over time, as a function of the number of random vectors (rv) used for the gradient estimation (Figure 1); that is the number of $u$ ’s used to estimate the gradient using the equation 4. To do so, we use the MNIST classification task (Deng 2012) using a Convolutional Neural Network (CNN) (Lecun et al. 1998) model. We choose values 8, 16, and 128 for the number of random vectors, and compare against the unbiased forward-only estimator recently proposed by (Baydin et al. 2022). The results clearly demonstrate an accuracyversus-steps advantage for a higher number of random vectors and for unbiased zeroth-order estimators compared to biased ones. Since the computational overhead of unbiasing estimators is relatively low (Chen 2020), we will use unbiased zeroth-order estimators in the subsequent experiments. A detailed explanation and experimental evaluation of the accuracy-efficiency trade-offs associated with the number of random vectors will be provided in the Appendix.
+
+![](images/e1416a8275684b2bb8730cdffca1a3d2ff35d4ea5aa8863c8488f6ad176cddd4.jpg)  
+Figure 3: Validation accuracy (Acc) comparison between the hybrid and mono-type estimator population for ResNet-18 on the CIFAR-10 dataset.
+
+![](images/18a79c141065cac0bf4070cfc3496f7d292cbc27003ea77a96bda2c050f90ec3.jpg)  
+Figure 4: Validation loss comparison between the hybrid and mono-type estimator population for transformer model on the synthetic Brackets dataset.
+
+For the next set of experiments, we evaluate different mono-type populations of ZO and FO optimizers and compare their performance with that of a hybrid population. In Figure 3, we fine-tune the ResNet-18 (He et al. 2015) model, pre-trained with ImageNet-1K (Russakovsky et al. 2015), on CIFAR-10 (Krizhevsky 2012) using populations of 1 ZO, 1 FO, 5 ZO, and a hybrid system consisting of 1 FO and $5 ~ Z 0$ nodes. To demonstrate the scalability of HDO in both convex and non-convex scenarios, we consider two settings: for the convex case, we assess the performance of a Logistic model on the MNIST dataset with various mono-type populations and a hybrid configuration of 24 FO and 256 ZO (Figure 2). For the non-convex case, we use a Transformer model (Vaswani et al. 2023) on “Brackets” dataset (Ebrahimi, Gelda, and Zhang 2020) (see the Appendix for more details). The populations that we study here are 1 ZO, 1 FO, 4 FO, 16 ZO, and a hybrid combination of 4 FO and 16 ZO (Figure 4).
+
+The results presented in Figure 2 (for the convex case), and Figures 3 & 4 (for the non-convex case) confirm the intuition, as well as our analysis; first-order nodes always outperform the same or lower number of zeroth-order ones, as shown in all the figures. However, zeroth-order nodes can in fact outperform first-order ones if their number is larger. We can conclude that 1) a larger population of ZO nodes can outperform smaller populations of FO or ZO nodes; and that 2) this larger uniform population is itself outperformed by a hybrid population.
+
+Our experiments demonstrate the desired speedup and scalability; populations with a large number of ZO nodes have faster convergence. Interestingly, aligned with the Theorem 1 that the speedup caused by the ZO nodes will appear after sufficiently large $T$ , in Figure 2, we observe that the (24-FO) group has a lower validation loss initially but the (256-ZO) and (24-FO, 256-ZO) groups outperform the former group after step 200. A similar phenomenon can also be observed in Figure 4. These results validate the theoretical finding, showing that with a sufficient number of steps, hybrid populations achieve faster convergence compared to homogeneous populations of first-order optimizers.
+
+# Discussion, Limitations, and Future Work
+
+We provided a first analysis of the convergence of decentralized gradient-based methods in a population mixing firstand zeroth-order gradient estimators for both convex and non-convex objectives. Our results show that even biased or noisy zeroth-order information can enhance convergence when integrated into a protocol.
+
+The experimental results validate our analysis and premise, demonstrating that first- and zeroth-order estimators can be effectively hybridized in a decentralized population. This is promising for environments with heterogeneous computational power, allowing agents to leverage local data even without gradient extraction capabilities.
+
+A practical embodiment could be a decentralized learning system where computationally powerful agents perform backpropagation as first-order agents, while computationally limited nodes estimate gradients via forward passes over local data, sharing this information during pairwise interactions.
+
+We focused on decentralized optimization, where nodes interact in randomly chosen pairs. However, our analysis can extend to more general interaction graph topologies, where convergence depends on the eigenvalue gap. Another extension we plan to explore includes additional gradient estimators and large-scale practical deployments to validate our approach. Our experimental simulations confirm the feasibility of our method, achieving their intended goal.

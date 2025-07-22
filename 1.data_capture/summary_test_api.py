@@ -64,10 +64,10 @@ def call_ark_api(prompt_content: str, temperature: float, top_p: float):
         return None # 在出错时返回None，方便上层处理
 
 # --- 3. 主逻辑 ---
-def summary_func(arxiv_id):
+def summary_func(arxiv_id, data_folder):
     # 读取论文文件
     try:
-        with open(f"/home/zhangping/jrz-test/PaperSAGE/1.data_capture/transferred_papers/extra/{arxiv_id}.md", 'r', encoding='utf-8') as f:
+        with open(f"{data_folder}/{arxiv_id}.md", 'r', encoding='utf-8') as f:
             paper = f.read()
     except FileNotFoundError:
         print("Error: Paper file not found.")

@@ -1,0 +1,272 @@
+# xPatch: Dual-Stream Time Series Forecasting with Exponential Seasonal-Trend Decomposition
+
+Artyom Stitsyuk 1, Jaesik Choi 1,2
+
+1Korea Advanced Institute of Science and Technology (KAIST), South Korea 2INEEJI, South Korea stitsyuk, jaesik.choi @kaist.ac.kr
+
+# Abstract
+
+In recent years, the application of transformer-based models in time-series forecasting has received significant attention. While often demonstrating promising results, the transformer architecture encounters challenges in fully exploiting the temporal relations within time series data due to its attention mechanism. In this work, we design eXponential Patch (xPatch for short), a novel dual-stream architecture that utilizes exponential decomposition. Inspired by the classical exponential smoothing approaches, xPatch introduces the innovative seasonal-trend exponential decomposition module. Additionally, we propose a dual-flow architecture that consists of an MLP-based linear stream and a CNN-based nonlinear stream. This model investigates the benefits of employing patching and channel-independence techniques within a non-transformer model. Finally, we develop a robust arctangent loss function and a sigmoid learning rate adjustment scheme, which prevent overfitting and boost forecasting performance.
+
+Code — https://github.com/stitsyuk/xPatch
+
+# 1 Introduction
+
+Long-term time series forecasting (LTSF) is one of the fundamental tasks in time series analysis. The task is focused on predicting future values over an extended period, based on historical data. With the advent of deep learning models, they have recently demonstrated superior performance in LTSF compared to traditional approaches such as ARIMA (Box et al. 2015) and LSTM (Bahdanau, Cho, and Bengio 2015).
+
+Transformer-based models (Vaswani et al. 2017) have revolutionized the LTSF task, enabling powerful AI systems to achieve state-of-the-art performance. The transformer architecture is considered highly successful in capturing semantic correlations among elements in long sequences. Recent works have primarily focused on adapting transformers to the LTSF task and addressing such limitations of the vanilla transformer as quadratic time and memory complexity (Li et al. 2019; Zhou et al. 2021; Wen et al. 2022).
+
+The self-attention mechanism employed in transformers is permutation-invariant. Although techniques like positional encoding can partially retain ordering information, preserving temporal information remains a challenge for transformer-based models. This limitation can adversely affect the performance of the LTSF task dealing with a continuous set of points. As a result, the effectiveness of transformers in the LTSF task has been challenged by a simple linear approach utilizing a Multi-Layer Perceptron (MLP) network (Zeng et al. 2023). Surprisingly, a simple linear model named DLinear has surpassed the state-of-the-art forecasting performance of all previous transformer-based models, raising a fundamental question: “Are Transformers effective for long-term time series forecasting?”.
+
+Due to the non-stationary nature of real-world systems, time series data usually contain complex temporal patterns. To handle this complexity and non-stationarity (Liu et al. 2022), many recent LTSF models have adopted a paradigm of decomposing inputs. They use a seasonal-trend decomposition to capture linear trend features and non-linear seasonal variations. For handling time series trend features, certain transformer-based models, including Autoformer (Wu et al. 2021) and FEDformer (Zhou et al. 2022), incorporate seasonal-trend data decomposition. By partitioning the signal into two components, each with distinct function behavior, it becomes more feasible to capture semantic features from each component and make separate predictions.
+
+Both Autoformer and FEDformer focus on refining the transformer architecture by introducing an auto-correlation mechanism and a frequency-enhanced method while decomposing the signal using a simple average pooling method. This technique requires padding at both ends, essentially repeating the last and first values. Consequently, we argue that this approach introduces a bias towards the initial and final values, potentially altering the behavior of trend values.
+
+We propose a simple yet effective decomposition technique based on a generally applicable time series smoothing method named Exponential Moving Average (EMA) (Gardner Jr 1985). The proposed strategy assigns exponentially decreasing weights over time, facilitating more efficient feature learning from the decomposed data. The resulting exponentially smoothed sequence represents the trend, while the residual difference encapsulates the seasonality.
+
+Currently, the state-of-the-art models for the LTSF task are transformer-based architectures CARD (Wang et al. 2024b) and PatchTST (Nie et al. 2023). These models rely on channel-independence and segmentation of time series into patches, which are used as input tokens for the transformer. However, we assume that the permutationinvariance of the attention mechanism in transformers may impede the model from attaining the optimal forecasting performance. Therefore, we are aiming to explore channel-independence and patching approaches within a non-transformer architecture, proposing the xPatch model.
+
+In this study, we introduce the utilization of the exponential seasonal-trend decomposition technique. Furthermore, we propose a robust arctangent loss with weight decay and a novel learning rate adjustment strategy that improves training adaptability. Additionally, we present the xPatch, a novel dual-flow network architecture that integrates Convolutional Neural Networks (CNNs), Multi-Layer Perceptrons (MLPs), patching, channel-independence, exponential seasonal-trend decomposition, and dual stream prediction.
+
+We summarized our main contributions as follows:
+
+• We propose a novel method for seasonal-trend decomposition that utilizes an Exponential Moving Average (EMA).   
+• We introduce the dual-flow network and investigate the patching and channel-independence approaches within the CNN-based backbone.   
+• We develop a robust arctangent loss and a novel sigmoid learning rate adjustment scheme with a warm-up that results in smoother training.
+
+# 2 Related Work
+
+Informer (Zhou et al. 2021) is the first well-known transformer-based model designed for the LTSF task. It employs ProbSparse self-attention and a generative style decoder for addressing quadratic time and memory complexity. Notably, this work also contributes to the field by curating data and introducing the Electricity Transformer Temperature (ETT) benchmark dataset that is now commonly used for LTSF experiments by most of the models.
+
+TimesNet (Wu et al. 2023) utilizes Fourier Transform to decompose time series into multiple components with varying period lengths, enhancing its focus on temporal variation modeling. The official repository provides a forecasting protocol with standardized hyperparameter settings and fairly implemented baselines.
+
+To address the issue of non-stationarity in time series data, several models employ series decomposition to better capture complex temporal patterns. Autoformer (Wu et al. 2021) and FEDformer (Zhou et al. 2022) are two recent transformer-based solutions for the LTSF task, leveraging auto-correlation mechanism and frequency-enhanced structure, respectively. Both models incorporate seasonal-trend decomposition within each neural block to enhance the predictability of time-series data. Specifically, they apply a moving average kernel to the input sequence with padding at both ends, extracting the trend component. The difference between the original time series and the extracted trend component is identified as the seasonal component.
+
+DLinear (Zeng et al. 2023) is a recent one-layer linear model that uses seasonal-trend decomposition as a preprocessing step. Initially, the model decomposes the raw data into trend and seasonal components using a moving average technique. Two linear layers are then applied independently to each of these components. The resulting features are subsequently aggregated to generate the final prediction.
+
+MICN (Wang et al. 2023) is a recent CNN-based solution that employs multi-scale hybrid seasonal-trend decomposition. After decomposing the input series into seasonal and trend components, the model integrates both global and local contexts to enhance forecasting accuracy.
+
+TimeMixer (Wang et al. 2024a) is an MLP-based approach that employs a decomposable multiscale-mixing method. The model uses the same series decomposition block from Autoformer (Wu et al. 2021) to break down multiscale time series into multiple seasonal and trend components. By leveraging the multiscale past information obtained after seasonal and trend mixing, the model predicts future values.
+
+ETSformer (Woo et al. 2022) and CARD (Wang et al. 2024b) are two transformer-based architectures that incorporate the exponential smoothing approach. ETSformer introduces Exponential Smoothing Attention (ESA), while CARD applies exponential smoothing to the query and key tokens before the token blending module within one prediction head of the attention mechanism. In contrast to these models, the proposed xPatch architecture employs Exponential Moving Average (EMA) decomposition to separate the time series into trend and seasonal components, which are then processed separately.
+
+Crossformer (Zhang and Yan 2022) and PatchTST (Nie et al. 2023) are transformer-based models that introduce a segmentation technique to LTSF. PatchTST divides time series data into subseries-level patches that serve as input tokens for the transformer. This approach is motivated by the vision transformer (Dosovitskiy et al. 2021) and designed for LTSF with channel-independence. Currently, PatchTST is recognized as the state-of-the-art solution for multivariate long-term forecasting. In our proposed xPatch model, we also incorporate patching and channel-independence approaches. Given that xPatch is a CNN-based approach, we investigate whether the superior performance of PatchTST can be attributed to its patching and channel-independence modules rather than its transformer architecture. To explore this, we examine if a CNN-based model can achieve improved results by leveraging these techniques.
+
+MobileNet (Howard et al. 2017) and ConvMixer (Trockman and Kolter 2022) are notable models designed for Computer Vision (CV) tasks that demonstrate the advantages of depthwise separable convolutions. In the proposed xPatch approach, we incorporate depthwise separable convolution as the non-linear stream of the dual-flow network.
+
+# 3 Proposed Method
+
+In multivariate time series forecasting, given the observation of the historical $L$ values ${ \boldsymbol x } = ( x _ { 1 } , x _ { 2 } , . . . , x _ { L } )$ , the task is to predict the future $T$ timesteps $\hat { x } = ( x _ { L + 1 } , x _ { L + 2 } , . . . , x _ { L + T } )$ . Each $x _ { t }$ value at timestep $t$ is multivariate, representing a vector of $M$ variables. Therefore, the multivariate lookback series is denoted as $\boldsymbol { x } \in \mathbb { R } ^ { M \times L }$ and the multivariate prediction is represented by xˆ RM×T .
+
+# 3.1 Seasonal-Trend Decomposition
+
+Seasonal-trend decomposition facilitates the learning of complex temporal patterns by separating the time series signal into trend and seasonal components. Trend features generally represent the long-term direction of the data, which can be linear or smoothly varying. In contrast, seasonal components capture repeating patterns or cycles that occur at regular intervals and are often non-linear due to the complexities and variations in periodic behavior. The model first learns the features of these components individually and then combines them to generate the final forecast.
+
+Simple Moving Average (SMA) is the decomposition approach utilized in Autoformer (Wu et al. 2021), FEDformer (Zhou et al. 2022), DLinear (Zeng et al. 2023), MICN (Wang et al. 2023), and TimeMixer (Wang et al. 2024a) models. SMA is defined as the unweighted mean of the previous $k$ data points.
+
+Moving average mean point $s _ { t }$ of the $k$ entries with $t$ being moving step, $n$ being dataset length, and $X \ =$ $x _ { 1 } , x _ { 2 } , . . . , x _ { n }$ being data points is calculated as:
+
+$$
+\begin{array} { l } { { \displaystyle s _ { t } = \frac { x _ { t } + x _ { t + 1 } + \ldots + x _ { t + k - 1 } } { k } = \frac { 1 } { k } \sum _ { i = t } ^ { t + k - 1 } x _ { i } } } \\ { { \displaystyle X _ { T } = \mathrm { A v g P o o l } ( \mathrm { P a d d i n g } ( X ) ) } } \\ { { \displaystyle X _ { S } = X - X _ { T } } } \end{array}
+$$
+
+where $\mathrm { \mathbf { A v g P o o l } } ( \cdot )$ denotes moving average with the padding operation, while $X _ { T }$ and $X _ { S }$ correspond to trend and seasonality components. Padding is employed to maintain the length of the time series unchanged after performing average pooling. Figure 1 illustrates an example of SMA decomposition.
+
+![](images/af87e9ae4dfedc9132f03167cea86a8f00163d9e1d16c95eafa92e45d375154f.jpg)  
+Figure 1: Example of SMA decomposition with kernel ${ \bf k } =$ 25 on a 96-length sample from the ETTh1 dataset.
+
+Firstly, we argue that the average pooling operation results in the loss of significant trend features (see Appendix B). Additionally, alignment requires padding on both ends of the series, which can distort the sequence at the head and tail.
+
+Secondly, the primary goal of decomposition is to enhance the interpretability of both decomposed signals. This entails improving the clarity of the trend and seasonality components while enriching them with more distinct features for learning. However, SMA produces an overly simplistic trend signal with limited diverse features and a complex seasonality pattern. As a result, we investigate an alternative decomposition method to address this issue.
+
+Exponential Moving Average (EMA) (Gardner Jr 1985) is an exponential smoothing method that assigns greater weight to more recent data points while smoothing out older data. This exponential weighting scheme allows EMA to respond more promptly to changes in the underlying trends of the time series, without the need for padding repeated values.
+
+EMA point $s _ { t }$ of data $\boldsymbol { x } _ { t }$ beginning at time $t = 0$ is represented by:
+
+$$
+\begin{array} { r l } & { s _ { 0 } = x _ { 0 } } \\ & { s _ { t } = \alpha x _ { t } + ( 1 - \alpha ) s _ { t - 1 } , t > 0 } \\ & { X _ { T } = \mathbf { E M A } ( X ) } \\ & { X _ { S } = X - X _ { T } } \end{array}
+$$
+
+where $\alpha$ is the smoothing factor, $0 \textless \alpha \textless 1$ , $\mathrm { E M A } ( \cdot )$ denotes exponential moving average, while $X _ { T }$ and $X _ { S }$ correspond to trend and seasonality components. Figure 2 shows an example of EMA decomposition.
+
+![](images/c5f0cf6b8d7f5c806e68e279bf4f08d063bb1b4de1281acf6118ddf78a89ccfb.jpg)  
+Figure 2: Example of EMA decomposition with $\alpha \ =$ $\{ 0 . 1 , 0 . 3 , 0 . 5 , 0 . 7 , 0 . 9 , 1 \}$ on a 96-length sample from the ETTh1 dataset.
+
+The exponential method offers greater control over the behavior of both trend and seasonality components. Given that data can exhibit diverse patterns, including stationary and non-stationary characteristics with varying periods and behaviors, the adaptability of exponential decomposition provides advantages in feature extraction (see Appendix B). Compared to SMA, EMA presents a more flexible approach to decomposition, as it adjusts its weighting scheme based on the exponential decay of data points. This adaptability allows EMA to capture changing trends more effectively, making it particularly suitable for time series with dynamic and evolving patterns (see Appendix C).
+
+# 3.2 Model Architecture
+
+Channel-Independence. The multivariate time series $x =$ $( x _ { 1 } , x _ { 2 } , . . . , x _ { L } )$ is divided into $M$ univariate sequences $\boldsymbol { x } ^ { ( i ) } ~ = ~ ( x _ { 1 } ^ { ( i ) } , x _ { 2 } ^ { ( i ) } , . . . , x _ { L } ^ { ( i ) } )$ , where $\boldsymbol { x } ^ { ( i ) } ~ \in ~ \mathbb { R } ^ { L }$ and $L$ is lookback of recent historical data points. Each of these univariate series is then individually fed into the backbone model, which consequently generates a prediction sequence $\hat { x } ^ { ( i ) } = ( \hat { x } _ { L + 1 } ^ { ( i ) } , \hat { x } _ { L + 2 } ^ { ( i ) } , . . . , \hat { x } _ { L + T } ^ { ( i ) } )$ , where $\hat { \boldsymbol { x } } ^ { ( i ) } \in \mathbb { R } ^ { T }$ and $T$ is future steps observations. This partitioning approach has proven to work well in both linear models and transformers (Zeng et al. 2023; Nie et al. 2023; Han, Ye, and Zhan 2023).
+
+![](images/42d8be25c7eca3974c70f39368a44aefc9c6c5dc3178a215d14d902267172893.jpg)  
+Figure 3: xPatch Model Overview. Every univariate series is passed through exponential decomposition. Consequently, the trend and seasonal components are processed through the dual flow network.
+
+Exponential Decomposition. Using the EMA method, we decompose each univariate series into trend and seasonality components, which are then processed separately by the dual-flow architecture. After processing, the learned trend and seasonal features are aggregated and passed to the final output layer to comprise the final prediction as illustrated in Figure 3. Details on optimization and ablation studies of EMA are available in Appendix D, E.
+
+Dual Flow Net. As the main backbone, we employ two distinct flows to analyze trend and seasonality: linear and non-linear streams. The trend component is processed through the linear MLP-based stream, while the seasonal component is handled by the non-linear CNN-based block.
+
+Seasonality represents periodic fluctuations around a constant level, meaning that the statistical properties of these fluctuations, such as mean and variance, remain stable over time, meaning that the seasonal component is stationary. In contrast, the trend reflects long-term progression with either increasing or decreasing behavior and a changing mean, which makes the trend component non-stationary.
+
+To summarize, in most cases, the seasonal component is non-linear and stationary, while the trend component is linear and non-stationary. However, some datasets might exhibit unusual behavior, such as a stationary trend. Therefore, the dual-stream architecture is designed to enhance the model’s adaptability to both stationary and non-stationary data. For the exploration of the dual-flow architecture, see Appendix F.
+
+Linear Stream. The linear stream is an MLP-based network that includes average pooling and layer normalization, intentionally omitting activation functions to emphasize linear features.
+
+The decomposed data $x ^ { ( i ) }$ is processed through two linear blocks, each consisting of a fully connected layer followed by average pooling with a kernel $k = 2$ for feature smoothing and layer normalization for training stability. Each linear layer and average pooling operation contribute to dimensionality reduction, encouraging the network to compress feature representations to fit the available space effectively. This reduction in the number of features, combined with the absence of activation functions and a bottleneck architecture, aims to retain only the most significant linear features of the smoothed trend.
+
+$$
+\boldsymbol { x } ^ { ( i ) } = \mathrm { L a y e r N o r m } ( \operatorname { A v g P o o l } ( \operatorname { L i n e a r } ( \boldsymbol { x } ^ { ( i ) } ) , k = 2 ) )
+$$
+
+The final expansion layer takes the bottleneck representation and upscales it to the prediction length.
+
+$$
+\hat { x } _ { l i n } ^ { ( i ) } = \mathrm { L i n e a r } ( x ^ { ( i ) } )
+$$
+
+Patching. Patching is a technique inspired by the vision transformer (Dosovitskiy et al. 2021) and was first introduced in the context of LTSF by PatchTST (Nie et al. 2023). This method unfolds each univariate time series using a sliding window. We incorporate patching into the non-linear block to emphasize repetitive seasonal features. By using patching, the model can better focus on these repetitive patterns, effectively capturing their inter-pattern dependencies more effectively.
+
+The patch length is denoted as $P$ , and the non-overlapping region between two consecutive patches is referred to as stride $S$ . We apply patching in the non-linear stream to each normalized univariate decomposed sequence $\boldsymbol { x } ^ { ( i ) } ~ \in ~ \mathbb { R } ^ { L }$ , which generates a sequence of $N$ 2D patches $\boldsymbol { x } _ { p } ^ { ( i ) } \in \mathbb { R } ^ { N \times P }$ . The number of patches is calculated as $\begin{array} { r } { N = \lfloor \frac { L - P } { S } \rfloor + 2 } \end{array}$ In our implementation, for a fair comparison with PatchTST and CARD, we adopt their setup for patch embedding, setting $P = 1 6$ and $S = 8$ .
+
+Non-linear Stream. The non-linear stream is a CNNbased network that introduces non-linearity through activation functions. By applying convolutions on top of patching, the CNN-based stream captures spatio-temporal patterns and inter-patch correlations, focusing on the non-linear features of the seasonal signal.
+
+First, the patched data x(pi) ∈ RN×P is embedded for increasing the number of features with activation function $\sigma$ and batch normalization (Ioffe and Szegedy 2015). Since the seasonal variations have many zero values, we employ GELU (Hendrycks and Gimpel 2016) as an activation function for its smooth transition around zero and non-linearity. The resulting embedded shape is denoted as $x _ { p } ^ { N \times P ^ { 2 } }$ .
+
+$$
+\boldsymbol { x } _ { p } ^ { N \times P ^ { 2 } } = \mathrm { B a t c h N o r m } ( \sigma ( \mathrm { E m b e d } ( \boldsymbol { x } _ { p } ^ { ( i ) } ) ) )
+$$
+
+Following embedding, the data is processed through depthwise separable convolution. This method splits the computation into two steps: depthwise convolution applies a single convolutional filter per input channel, and pointwise convolution creates a linear combination of the output of the depthwise convolution, with an additional residual stream between them.
+
+Given that the xPatch architecture leverages channelindependence, it was determined to employ patching to increment the number of dimensions, enabling patches to function as channels in the data $x _ { p } ^ { N \times P ^ { 2 } }$ . Consequently, rather than relying on inter-channel feature representations, we utilize channel-independent inter-patch representations. This approach aims to capture comprehensive semantic information that may not be available at the point level and allows to focus on non-linear features.
+
+For depthwise convolution, we employ grouped convolution with the number of groups $g$ equal to the number of patches $N$ , a large kernel size $k$ equal to the patch length $P$ , and a convolution stride $s$ equal to the patch length $P$ .
+
+$$
+\begin{array} { r l } & { x _ { p } ^ { N \times P } = \mathrm { C o n v } _ { N \to N } \big ( x _ { p } ^ { N \times P ^ { 2 } } , k = P , s = P , g = N \big ) } \\ & { x _ { p } ^ { N \times P } = \mathrm { B a t c h N o r m } ( \sigma ( x _ { p } ^ { N \times P } ) ) } \end{array}
+$$
+
+Depthwise convolution applies a single convolutional filter per input channel, generating $N$ feature maps, each corresponding to a specific patch. This approach enables the model to capture temporal features with group convolution that is consistent for periodic patches.
+
+Subsequently, the data is updated with a linear residual connection spanning the depthwise convolution. Although depthwise convolution captures temporal relations between periodic patterns, it may not effectively capture inter-patch feature correlations. Therefore, the sequence is further processed through the pointwise convolution layer with the number of groups $g = 1$ , a small kernel size $k = 1$ , and a convolution stride $s = 1$ .
+
+$$
+\begin{array} { r l } & { x _ { p } ^ { N \times P } = \mathrm { D e p t h w i s e C o n v } ( x _ { p } ^ { N \times P ^ { 2 } } ) + x _ { p } ^ { N \times P ^ { 2 } } } \\ & { x _ { p } ^ { N \times P } = \mathrm { C o n v } _ { N  N } ( x _ { p } ^ { N \times P } , k = 1 , s = 1 , g = 1 ) } \\ & { x _ { p } ^ { N \times P } = \mathrm { B a t c h N o r m } ( \sigma ( x _ { p } ^ { N \times P } ) ) } \end{array}
+$$
+
+Pointwise convolution creates a linear combination of the output and aggregates features across different patches without skipping elements.
+
+These predictions are then processed through the MLP flatten layer. This layer is designed in a similar style to PatchTST: the first linear layer doubles the hidden dimension, while the second linear layer projects it back with a GELU activation function between them.
+
+$$
+\begin{array} { r } { \hat { x } _ { n o n l i n } ^ { ( i ) } = \mathrm { L i n e a r } ( \sigma ( \mathrm { L i n e a r } ( \operatorname { F l a t t e n } ( x _ { p } ^ { N \times P } ) ) ) ) } \end{array}
+$$
+
+Finally, linear features (4) and non-linear features (11) are concatenated and fed into the final linear layer, which merges linear and non-linear features for the output prediction.
+
+$$
+\hat { x } ^ { ( i ) } = \mathrm { L i n e a r } ( \mathrm { c o n c a t } ( \hat { x } _ { l i n } ^ { ( i ) } , \hat { x } _ { n o n l i n } ^ { ( i ) } ) )
+$$
+
+We concatenate the linear and non-linear features from the two flows, representing learned representations from the MLP and CNN streams. This mechanism enables the model to dynamically weigh the significance of both linear and non-linear features in the final prediction, providing adaptability to diverse patterns in time series data.
+
+# 3.3 Loss Function
+
+Mean Squared Error (MSE) loss is a training loss scheme commonly used by LTSF models. The MSE loss $\mathcal { L } _ { \mathrm { M S E } }$ betrwuethenotbhse rpvraetdiiocntse ,vawrihaetre iusefnucteu $\boldsymbol { \hat { x } _ { 1 : T } ^ { ( i ) } }$ eadnicdtitohen lgernogutnhd, $x _ { 1 : T } ^ { ( i ) }$ $T$ is denoted as:
+
+$$
+\mathcal { L } _ { \mathrm { M S E } } = \frac { 1 } { T } \sum _ { i = 1 } ^ { T } | | \hat { x } _ { 1 : T } ^ { ( i ) } - x _ { 1 : T } ^ { ( i ) } | | _ { 2 } ^ { 2 }
+$$
+
+The recent transformer-based model CARD (Wang et al. 2024b) introduced a novel signal decay-based loss function, where they scale down the far-future Mean Absolute Error (MAE) loss to address the high variance. MAE was chosen since it is more resilient to outliers than MSE.
+
+$$
+\mathcal { L } _ { \mathrm { C A R D } } = \frac { 1 } { T } \sum _ { i = 1 } ^ { T } i ^ { - \frac { 1 } { 2 } } | | \hat { x } _ { 1 : T } ^ { ( i ) } - x _ { 1 : T } ^ { ( i ) } | |
+$$
+
+where $i$ corresponds to the prediction point in the future. This training scheme was proven by CARD to be efficient and to increase the performance of existing models.
+
+To identify a more effective scaling loss coefficient, we extend Equation (14) to a universally applicable MAE scalable loss function:
+
+$$
+\mathcal { L } = \frac { 1 } { T } \sum _ { i = 1 } ^ { T } \rho ( i ) | | \hat { x } _ { 1 : T } ^ { ( i ) } - x _ { 1 : T } ^ { ( i ) } | |
+$$
+
+where $\rho ( i )$ represents the scaling coefficient. Thus, the ${ \mathcal { L } } _ { \mathrm { C A R D } }$ loss defined in Equation (14) emerges as a specific instance of the scalable loss function delineated in Equation (15), with $\rho ( i ) = i ^ { - \frac { 1 } { 2 } }$ .
+
+We find that the scaling coefficient $\rho _ { C A R D } ( i ) = i ^ { - \frac { 1 } { 2 } }$ exhibits a too rapid decrease rate for our task. Therefore, we propose a novel arctangent loss $\mathcal { L } _ { a r c t a n }$ , which features a slower increase rate compared to the exponential functions analyzed in CARD (Wang et al. 2024b):
+
+Table 1: Averaged long-term forecasting results with unified lookback window $L = 3 6$ for the ILI dataset, and $L = 9 6$ for all other datasets. All results are averaged from 4 different prediction lengths: $T = \{ 2 4 , 3 6 , 4 8 , 6 0 \}$ for the ILI dataset, and $T = \{ 9 6 , 1 9 2 , 3 3 6 , 7 2 0 \}$ for all other datasets, respectively. The best model is boldface and the second best is underlined. See Table 13 in Appendix K for the full results.   
+
+<html><body><table><tr><td>Models</td><td colspan="2">xPatch (ours)</td><td colspan="2">CARD (2024)</td><td colspan="2">TimeMixer (2024)</td><td colspan="2">iTransformer (2024)</td><td colspan="2">RLinear PatchTST (2023) (2023)</td><td colspan="2">MICN (2023)</td><td colspan="2">DLinear (2023)</td><td colspan="2">TimesNet (2023)</td><td colspan="2">ETSformer (2022)</td></tr><tr><td>Metric</td><td>MSE</td><td>MAE</td><td>MSE MAE</td><td>MSE</td><td>MAE</td><td>MSE</td><td>MAE</td><td>MSE MAE</td><td>MSE</td><td>MAE</td><td>MSE</td><td>MAE</td><td>MSE</td><td>MAE</td><td>MSE</td><td>MAE</td><td>MSE MAE</td></tr><tr><td>ETTh1</td><td>0.428</td><td>0.419</td><td>0.442 0.429</td><td>0.447</td><td>0.44</td><td>0.454</td><td>0.448 0.438</td><td>0.427</td><td>0.45</td><td>0.441</td><td>0.559</td><td>0.535</td><td>0.456</td><td>0.452</td><td>0.458</td><td>0.450 0.542</td><td>0.510</td></tr><tr><td>ETTh2</td><td>0.319</td><td>0.361</td><td>0.368 0.390</td><td>0.365</td><td>0.395</td><td>0.383</td><td>0.407 0.362</td><td>0.394</td><td>0.365</td><td>0.394</td><td>0.588</td><td>0.525</td><td>0.559</td><td>0.515</td><td>0.414</td><td>0.427 0.439</td><td>0.452</td></tr><tr><td>ETTm1</td><td>0.377</td><td>0.384</td><td>0.382 0.383</td><td>0.381</td><td>0.396</td><td>0.407</td><td>0.410 0.409</td><td>0.401</td><td>0.383</td><td></td><td>0.3940.392</td><td>0.414</td><td>0.403</td><td>0.407</td><td>0.400</td><td>0.406 0.429</td><td>0.425</td></tr><tr><td>ETTm2</td><td>0.267</td><td>0.313</td><td>0.272 0.317</td><td>0.275</td><td>0.323</td><td>0.288</td><td>0.332 0.286</td><td>0.328</td><td>0.284</td><td>0.327</td><td>0.328</td><td>0.382</td><td>0.350</td><td>0.401</td><td>0.291</td><td>0.333 0.293</td><td>0.342</td></tr><tr><td>Weather</td><td>0.232</td><td>0.261</td><td>0.239 0.265</td><td>0.240</td><td>0.272</td><td>0.258</td><td>0.278</td><td>0.269 0.289</td><td>0.257</td><td></td><td>0.2800.243</td><td>0.299</td><td>0.265</td><td>0.317</td><td>0.259</td><td>0.287 0.271</td><td>0.334</td></tr><tr><td>Traffic</td><td>0.499</td><td>0.279</td><td>0.453 0.282</td><td>0.485</td><td>0.298</td><td>0.428</td><td>0.282 0.623</td><td>0.372</td><td>0.467</td><td>0.292</td><td>0.542</td><td>0.316</td><td>0.625</td><td>0.383</td><td>0.620</td><td>0.336 0.621</td><td>0.396</td></tr><tr><td>Electricity</td><td>0.179</td><td>0.264</td><td>0.168 0.258</td><td>0.182</td><td>0.273</td><td>0.178</td><td>0.270 0.214</td><td>0.291</td><td>0.190</td><td></td><td>0.2750.187</td><td>0.295</td><td>0.212</td><td>0.300</td><td>0.193</td><td>0.295 0.208</td><td>0.323</td></tr><tr><td>Exchange</td><td>0.375</td><td>0.408</td><td>0.360 0.402</td><td>0.408</td><td>0.422</td><td>0.360</td><td>0.403 0.380</td><td>0.410</td><td>0.364</td><td>0.400</td><td>0.315</td><td>0.404</td><td>0.354</td><td>0.414</td><td>0.416</td><td>0.443 0.410</td><td>0.427</td></tr><tr><td>Solar</td><td>0.239</td><td>0.236</td><td>0.237 0.239</td><td>0.216</td><td>0.280</td><td>0.233</td><td>0.262 0.369</td><td>0.357</td><td>0.254</td><td>0.289</td><td>0.283</td><td>0.358</td><td>0.327</td><td>0.398</td><td>0.301</td><td>0.319 0.603</td><td>0.615</td></tr><tr><td>ILI</td><td>1.442</td><td>0.725</td><td>1.916 0.842</td><td>1.708</td><td>0.820</td><td>2.918</td><td>1.154</td><td>2.452 0.978</td><td>1.626</td><td>0.804</td><td>2.664</td><td>1.086</td><td>2.616</td><td>1.090</td><td>2.139</td><td>0.931 2.497</td><td>1.004</td></tr></table></body></html>
+
+$$
+\mathcal { L } _ { a r c t a n } = \frac { 1 } { T } \sum _ { i = 1 } ^ { T } \rho _ { a r c t a n } ( i ) | | \hat { x } _ { 1 : T } ^ { ( i ) } - x _ { 1 : T } ^ { ( i ) } | |
+$$
+
+Mathematical proofs, ablation studies on state-of-the-art models employing the arctangent loss, and the arctangent function’s scaling analysis can be found in Appendix G.
+
+# 3.4 Learning Rate Adjustment Scheme
+
+Most recent LTSF models (Zhou et al. 2021; Wu et al. 2021; Zhou et al. 2022; Woo et al. 2022; Wu et al. 2023; Zeng et al. 2023; Li et al. 2023; Liu et al. 2024) adapt standard learning rate adjustment technique. Learning rate $\alpha _ { t }$ at epoch $t$ with initial learning rate $\alpha _ { 0 }$ is calculated as:
+
+$$
+\alpha _ { t } = \alpha _ { t - 1 } * 0 . 5 ^ { t - 1 } , \mathrm { f o r } t \geq 1
+$$
+
+This strategy results in a decreasing learning rate with each successive epoch. Such a rapidly decreasing scheme was effective since the models were trained with a small number of epochs, usually limited to 10.
+
+PatchTST (Nie et al. 2023) introduced a long training approach with an upper limit of 100 epochs and a new learning rate adjustment schedule:
+
+$$
+\begin{array} { l } { \alpha _ { t } = \alpha _ { 0 } , { \mathrm { ~ f o r ~ } } t < 3 , } \\ { \alpha _ { t } = \alpha _ { t - 1 } * 0 . 9 ^ { t - 3 } , { \mathrm { ~ f o r ~ } } t \geq 3 } \end{array}
+$$
+
+Consequently, CARD (Wang et al. 2024b) developed a new linear warm-up of the model with subsequent cosine learning rate decay. Learning rate $\alpha _ { t }$ at epoch $t$ with initial learning rate $\alpha _ { 0 }$ , number of warmup epochs $w$ , and upper limit of 100 epochs is calculated as:
+
+$$
+\begin{array} { l } { \displaystyle \alpha _ { t } = \alpha _ { t - 1 } * \frac { t } { w } , \mathrm { f o r } t < w , } \\ { \displaystyle \alpha _ { t } = 0 . 5 \alpha ( 1 + c o s ( \pi * \frac { ( t - w ) } { 1 0 0 - w } ) ) , \mathrm { f o r } t \geq w } \end{array}
+$$
+
+We introduce a novel sigmoid learning rate adjustment scheme. The learning rate $\alpha _ { t }$ at epoch $t$ , with an initial learning rate $\alpha _ { 0 }$ , logistic growth rate $k$ , decreasing curve smoothing rate $s$ , and warm-up coefficient $w$ , is calculated as follows:
+
+$$
+\alpha _ { t } = \frac { \alpha _ { 0 } } { 1 + e ^ { - k ( t - w ) } } - \frac { \alpha _ { 0 } } { 1 + e ^ { - \frac { k } { s } ( t - s w ) } }
+$$
+
+Mathematical proofs, ablation studies on state-of-the-art models using the sigmoid learning rate adjustment approach, and hyperparameters selection are available in Appendix $\mathrm { ~ H ~ }$ .
+
+# 4 Experiments
+
+Datasets. We conduct extensive experiments on nine realworld multivariate time series datasets, including Electricity Transform Temperature (ETTh1, ETTh2, ETTm1, ETTm2) (Zhou et al. 2021), Weather, Traffic, Electricity, Exchangerate, ILI (Wu et al. 2021), and Solar-energy (Lai et al. 2018).
+
+Evaluation Metrics. Following previous works, we use Mean Squared Error (MSE) and Mean Absolute Error (MAE) metrics to assess the performance.
+
+Implementation Details. All the experiments are implemented in PyTorch (Paszke et al. 2019), and conducted on a single Quadro RTX 6000 GPU.
+
+Baselines. We choose the last state-of-the-art LTSF models, including Autoformer (2021) (Wu et al. 2021), FEDformer (2022) (Zhou et al. 2022), ETSformer (2022) (Woo et al. 2022), TimesNet (2023) (Wu et al. 2023), DLinear (2023) (Zeng et al. 2023), RLinear (2023) (Li et al. 2023), MICN (2023) (Wang et al. 2023), PatchTST (2023) (Nie et al. 2023), iTransformer (2024) (Liu et al. 2024), TimeMixer (2024) (Wang et al. 2024a), and CARD (2024) (Wang et al. 2024b) as baselines for our experiments.
+
+Unified Experimental Settings. To ensure a fair comparison, we conduct 2 types of experiments. The first experiment uses unified settings based on the forecasting protocol proposed by TimesNet (Wu et al. 2023): a lookback length $L = 3 6$ , prediction lengths $T = \{ 2 4 , 3 6 , 4 8 , 6 0 \}$ for the ILI dataset, and $L = 9 6$ , $T = \{ 9 6 , 1 9 2 , 3 3 6 , 7 2 0 \}$ for all other datasets. The averaged results are reported in Table 1.
+
+Table 2: Averaged long-term forecasting results under hyperparameter searching. All results are averaged from 4 different prediction lengths: $T = \{ 2 4 , 3 6 , 4 8 , 6 0 \}$ for the ILI dataset, and $T = \{ 9 6 , 1 9 2 , 3 3 6 , 7 2 0 \}$ for all other datasets, respectively. The best model is boldface and the second best is underlined. See Table 14 in Appendix K for the full results.   
+
+<html><body><table><tr><td>Models</td><td> xPatch</td><td></td><td>CARD</td><td>TimeMixer</td><td></td><td>iTransformer</td><td>RLinear</td><td></td><td>PatchTST (2023)</td><td></td><td>MICN</td><td>DLinear</td><td></td><td>TimesNet</td><td></td><td>ETSformer</td></tr><tr><td>Metric</td><td>(ours) MSE</td><td>MAE</td><td>(2024) MSE MAE</td><td>(2024) MSE</td><td>MAE MSE</td><td>(2024) MAE</td><td>MSE</td><td>(2023) MAE</td><td>MSE</td><td>MAE</td><td>(2023) MSE</td><td>MAE MSE</td><td>(2023) MAE</td><td>MSE</td><td>(2023) MAE</td><td>(2022) MSE MAE</td></tr><tr><td>ETTh1</td><td>0.391</td><td>0.412</td><td>0.401 0.422</td><td>0.411</td><td>0.423 0.501</td><td>0.492</td><td>0.413</td><td>0.427</td><td>0.413</td><td>0.434</td><td>0.440 0.462</td><td>0.423</td><td>0.437</td><td>0.458</td><td>0.450</td><td>0.542 0.510</td></tr><tr><td>ETTh2</td><td>0.299</td><td>0.351</td><td>0.321 0.373</td><td>0.316</td><td>0.384 0.385</td><td>0.417</td><td>0.328</td><td>0.382</td><td>0.331</td><td>0.381</td><td>0.403 0.437</td><td>0.431</td><td>0.447</td><td>0.414</td><td>0.427</td><td>0.439 0.452</td></tr><tr><td>ETTm1</td><td>0.341</td><td>0.368</td><td>0.350 0.368</td><td>0.348</td><td>0.376 0.373</td><td>0.404</td><td>0.359</td><td>0.378</td><td>0.353</td><td>0.3820.387</td><td>0.411</td><td>0.357</td><td>0.379</td><td>0.400</td><td>0.406</td><td>0.429 0.425</td></tr><tr><td>ETTm2</td><td>0.242</td><td>0.300</td><td>0.255 0.310</td><td>0.256</td><td>0.3160.274</td><td>0.335</td><td>0.253</td><td>0.313</td><td>0.256</td><td>0.317</td><td>0.284</td><td>0.3400.267</td><td>0.332</td><td>0.291</td><td>0.333</td><td>0.293 0.342</td></tr><tr><td>Weather</td><td>0.211</td><td>0.247</td><td>0.220 0.2480.222</td><td></td><td>0.262 0.271</td><td>0.297</td><td>0.242</td><td>0.278</td><td>0.226</td><td>0.264</td><td>0.243 0.299</td><td>0.246</td><td>0.300</td><td>0.259</td><td>0.287</td><td>0.271 0.334</td></tr><tr><td>Traffic</td><td>0.392</td><td>0.248</td><td>0.381 0.251</td><td>0.388</td><td>0.263 0.378</td><td>0.270</td><td>0.417</td><td>0.283</td><td>0.391</td><td>0.264</td><td>0.542 0.316</td><td>0.434</td><td>0.295</td><td>0.620</td><td>0.336 0.621</td><td>0.396</td></tr><tr><td>Electricity</td><td>0.153</td><td>0.245</td><td>0.157 0.251</td><td>0.156</td><td>0.247 0.161</td><td>0.257</td><td>0.164</td><td>0.257</td><td>0.159</td><td>0.253</td><td>0.187 0.295</td><td>0.166</td><td>0.264</td><td>0.193</td><td>0.295 0.208</td><td>0.323</td></tr><tr><td>Exchange</td><td>0.366</td><td>0.404</td><td>0.360 0.402</td><td>0.471</td><td>0.452 0.458</td><td>0.469</td><td>0.423</td><td>0.427</td><td>0.405</td><td>0.426</td><td>0.315 0.404</td><td>0.297</td><td>0.378</td><td>0.416</td><td>0.443</td><td>0.410 0.427</td></tr><tr><td>Solar</td><td>0.194</td><td>0.214</td><td>0.198 0.225</td><td>0.192</td><td>0.244 0.197</td><td>0.262</td><td>0.235</td><td>0.266</td><td>0.256</td><td>0.298</td><td>0.213 0.266</td><td>0.329</td><td></td><td>0.4000.244</td><td>0.334</td><td>0.603 0.615</td></tr><tr><td>ILI</td><td>1.281</td><td>0.688</td><td>1.916 0.842</td><td>1.971</td><td>0.924 2.947</td><td>1.193</td><td>1.803</td><td>0.874</td><td>1.480</td><td>0.807</td><td>2.567 1.056</td><td>2.169</td><td>1.041</td><td>2.139</td><td>0.931</td><td>2.497 1.004</td></tr></table></body></html>
+
+To handle data heterogeneity and distribution shift, we apply reversible instance normalization (Kim et al. 2021). In Appendix J, we examine the impact of instance normalization on the forecasting results of xPatch and other state-ofthe-art models, comparing their performance with and without the RevIN module.
+
+Hyperparameter Search. In the second experiment, we aim to determine the upper bounds of the compared models and conduct a hyperparameter search. We evaluate all models to see if they benefit from longer historical data to identify the optimal lookback length for each, as detailed in Appendix I. For the models that benefit from a longer input length, namely xPatch, CARD, TimeMixer, iTransformer, RLinear, PatchTST, and DLinear, we perform a hyperparameter search similar to TimeMixer (Wang et al. 2024a). The averaged results are reported in Table 2.
+
+All implementations are derived from the models’ official repository code, maintaining the same configurations. It is also important to note that we strictly adhere to the settings specified in the official implementations, including the number of epochs (100 for CARD and PatchTST, 15 for RLinear) and the learning rate adjustment strategy.
+
+Results. In the unified experimental settings, xPatch achieves the best averaged performance on $60 \%$ of the datasets using the MSE metric and $70 \%$ of the datasets using the MAE metric. Compared to CARD, xPatch surpasses it by $2 . 4 6 \%$ in MSE and $2 . 3 4 \%$ in MAE. Compared to TimeMixer, xPatch surpasses it by $3 . 3 4 \%$ in MSE and $6 . 3 4 \%$ in MAE. Compared to PatchTST, xPatch surpasses it by $4 . 7 6 \%$ in MSE and $6 . 2 0 \%$ in MAE.
+
+In the hyperparameter search settings, xPatch achieves the best averaged performance on $70 \%$ of the datasets using the MSE metric and $90 \%$ of the datasets using the MAE metric. Compared to CARD, xPatch surpasses it by $5 . 2 9 \%$ in MSE and $3 . 8 1 \%$ in MAE. Compared to TimeMixer, xPatch surpasses it by $7 . 4 5 \%$ in MSE and $7 . 8 5 \%$ in MAE. Compared to PatchTST, xPatch surpasses it by $7 . 8 7 \%$ in MSE and $8 . 5 9 \%$ in MAE.
+
+Computational Cost. While it is true that the proposed dual-flow architecture incurs higher computational costs compared to single-stream CNN and MLP models, it is important to note that convolution and linear operations are initially not as computationally expensive as transformerbased solutions. The overall increase in computational costs remains relatively small, as shown in Table 3. Moreover, the enhanced performance of the introduced dual-stream architecture outweighs these additional computational costs.
+
+Table 3: The average per step running and inference time maintaining the same settings for all benchmarks.   
+
+<html><body><table><tr><td>Method</td><td>Training time</td><td>Inference time</td></tr><tr><td>MLP-stream</td><td>0.948 msec</td><td>0.540 msec</td></tr><tr><td>CNN-stream</td><td>1.811 msec</td><td>0.963 msec</td></tr><tr><td>xPatch</td><td>3.099 msec</td><td>1.303 msec</td></tr><tr><td>CARD</td><td>14.877 msec</td><td>7.162 msec</td></tr><tr><td>TimeMixer</td><td>13.174 msec</td><td>8.848 msec</td></tr><tr><td>iTransformer</td><td>6.290 msec</td><td>2.743 msec</td></tr><tr><td>PatchTST</td><td>6.618 msec</td><td>2.917 msec</td></tr><tr><td>DLinear</td><td>0.420 msec</td><td>0.310 msec</td></tr></table></body></html>
+
+# 5 Conclusion
+
+This study introduces xPatch, a novel dual-flow architecture for long-term time series forecasting (LTSF). xPatch combines the strengths of both Convolutional Neural Networks (CNNs) and Multi-Layer Perceptrons (MLPs) to achieve superior performance. Our findings demonstrate that the integration of an Exponential Moving Average (EMA) seasonaltrend decomposition module effectively captures underlying trends and enhances forecasting accuracy. The dual-stream network further enhances xPatch’s adaptability by dynamically weighing the importance of linear and non-linear features for diverse time series patterns. Additionally, this study introduces a robust arctangent loss function and a novel sigmoid learning rate adjustment approach, both of which consistently improve the performance of existing models. By investigating patching and channel-independence within a CNN-based backbone, xPatch offers a compelling alternative to transformer-based architectures, achieving superior performance while maintaining computational efficiency.

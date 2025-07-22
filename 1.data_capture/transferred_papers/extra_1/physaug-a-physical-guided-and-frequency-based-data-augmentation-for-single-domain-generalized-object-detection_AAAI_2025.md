@@ -1,0 +1,185 @@
+# PhysAug: A Physical-guided and Frequency-based Data Augmentation for Single-Domain Generalized Object Detection
+
+Xiaoran ${ \bf X } { \bf u } ^ { 1 , 2 }$ , Jiangang $\mathbf { Y a n g } ^ { 2 * }$ , Wenhui $\mathbf { S h i } ^ { 2 }$ , Siyuan $\mathbf { D i n g } ^ { 2 }$ , Luqing Luo2, Jian Liu1,2
+
+1School of Advanced Interdisciplinary Sciences, University of Chinese Academy of Sciences 2IPHAC Lab, Institute of Microelectronics of the Chinese Academy of Sciences xuxiaoran $2 2 @$ mails.ucas.ac.cn, {yangjiangang,luoluqing,shiwenhui,dingsiyuan,liujian}@ime.ac.cn
+
+# Abstract
+
+Single-Domain Generalized Object Detection (S-DGOD) aims to train on a single source domain for robust performance across a variety of unseen target domains by taking advantage of an object detector. Existing S-DGOD approaches often rely on data augmentation strategies, including a composition of visual transformations, to enhance the detector’s generalization ability. However, the absence of real-world prior knowledge hinders data augmentation from contributing to the diversity of training data distributions. To address this issue, we propose PhysAug, a novel physical model-based non-ideal imaging condition data augmentation method, to enhance the adaptability of the S-DGOD tasks. Drawing upon the principles of atmospheric optics, we develop a universal perturbation model that serves as the foundation for our proposed PhysAug. Given that visual perturbations typically arise from the interaction of light with atmospheric particles, the image frequency spectrum is harnessed to simulate realworld variations during training. This approach fosters the detector to learn domain-invariant representations, thereby enhancing its ability to generalize across various settings. Without altering the network architecture or loss function, our approach significantly outperforms the state-of-the-art across various S-DGOD datasets. In particular, it achieves a substantial improvement of $7 . 3 \%$ and $7 . 2 \%$ over the baseline on DWD and Cityscape-C, highlighting its enhanced generalizability in real-world settings.
+
+# Code — https://github.com/startracker0/PhysAug
+
+# Introduction
+
+Object detection is a fundamental task in computer vision aiming to localize and recognize objects in natural images (Ren et al. 2015; Redmon et al. 2016; Tian et al. 2022; Zou et al. 2023). In past decades, object detection has achieved significant progress due to the advancement of deep learning, which assumes that the training data and test data come from the same distribution (Zhao et al. 2019). However, distribution shifts in various real-world applications make deep learning-based object detectors impractical. For instance, when trained on high-quality source data, object detectors for autonomous driving tend to perform poorly on different distributions of target data due to the changes in weather, illuminations, and object appearances. Such performance degradation hinders its wide deployment in safetycritical areas.
+
+![](images/4d439d314a5816eb856e3b5029ab9bc7bccb72baed18b4518c5f367816471592.jpg)  
+Figure 1: (a) The Physical imaging process in the atmosphere. Path1: Incident light path, Path2: Reflected light path, Path3: Atmospheric light path. (b) The cases of image degradation due to the different interactions between light and atmospheric particles.
+
+To tackle this issue, single-domain generalized object detection (S-DGOD) has emerged as a prominent learning paradigm to alleviate the domain-shift impact, which aims at generalizing an object detector trained on a single source domain to multiple unseen target domains. Along this line of research, data augmentation is an active research direction for the S-DGOD problem to enrich the diversity of source domain. Several works propose to design the compositional policies of pre-defined visual corruptions applied on the global image or object-level regions (Lee et al. 2024) for expanding training samples. SRCD (Rao et al. 2023) introduces a mixing strategy of the global image with texture of its patches to enforce the model to focus on semantic content. UFR (Liu et al. 2024) adapts a combination of frequency-based and spatial-based transformations to augment local objects. However, these methods do not explicitly consider the formation mechanism of non-ideal imaging conditions, preventing the capture of real-world variations. Fig. 1(a) depicts the optical imaging process with three light propagation paths through the atmosphere. Among these paths, as shown in Fig. 1(b), interactions between light and various particles in the atmosphere are the primary causes of image degradation.
+
+In this paper, we first formulate a universal perturbation model from the theory of atmospheric optics. This perturbation model aims to explicitly characterize the inferior cases of optical imaging resulting from light propagation properties in the atmosphere. Guided by this physical-based model, we introduce our data augmentation method, namely PhysAug. Specifically, PhysAug is implemented from a fourier perspective: we adopt simple frequency-dependent filters to augment low-frequency components of the image, simulating the global non-uniform illumination caused by light scattering and attenuation. Furthermore, fourier basis functions are randomly combined and projected onto the spatial domain of the image, generating local occlusion effects due to non-transparent particles in the wild. We conduct experiments on two S-DGOD datasets, Diverse Weather Dataset (DWD) and Cityscapes-C. The results show that PhysAug significantly outperforms existing state-of-the-art methods, achieving improvements of $7 . 3 \%$ and $7 . 2 \%$ over the baseline methods on the corrupted domains of DWD and Cityscapes-C, respectively. Besides, our analysis indicates that PhysAug enables models to learn better domain-invariant representations than non-physical based augmentations, proving its superiority. In summary, our contributions are as follows:
+
+• We establish a universal perturbation model based on atmospheric optics, which is the first attempt to guide the design of data augmentation from the perspective of physical principles. • We introduce PhysAug, a frequency-based data augmentation method tailored for the S-DGOD problem. This method accurately simulates naturally-occurring visual degradation throughout the full trajectory of light propagation, enriching real-world variations in training data. • Comprehensive experiments and analysis validate the effectiveness of our method. Our method achieves new state-of-the-art performance on two standard S-DGOD datasets, outperforming other approaches by a large margin.
+
+# Related Works
+
+# Single-Domain Generalization for Object Detection
+
+To enhance model performance in unseen target domains, recent advancements in this field have explored various approaches. These approaches could be categorized into three main types: data augmentation, losses for domain generalization, and network architecture improvements. Most existing methods address this task through data augmentation. Those methods generate new domains via various transformations, thereby converting the S-DGOD problem into a domain adaptation object detection challenge. (Vidit, Engilberge, and Salzmann 2023) leveraged the visionlanguage model CLIP for semantic augmentation with textual prompts, enhancing the diversity of features extracted by the model. (Lee et al. 2024) employs an object-aware augmentation approach that enables the model to better detect and focus on potential regions of interest. DivAlign (Danish et al. 2024) similarly opts for diversity in the source domain and additionally aligns losses based on the class prediction results from the detector. In addition to data augmentation, domain-invariant feature distillation and neural architecture search have also been successfully employed to enhance model generalization. CDSD (Wu and Deng 2022) adopts a cyclic self-decoupling method to extract domain-invariant representations from the training data. G-NAS (Wu et al. 2024) searches for the most general architecture to prevent the model from overfitting. Unlike other methods, we propose PhysAug from the perspective of physical modeling, incorporating real-world prior knowledge into the augmentation process.
+
+# Data Augmentation for Domain Generalization
+
+The most commonly used method in domain generalization is data augmentation in image domain (Zhou et al. 2022; Shorten and Khoshgoftaar 2019; Zhao et al. 2020; Rebuff et al. 2021), there are several widely applied methods, including MixUp (Zhang et al. 2017), Cutout (DeVries and Taylor 2017), and AugMix (Hendrycks et al. 2019). Although image domain data augmentation has achieved significant success in enhancing model generalization and robustness. (Yin et al. 2019) found that models trained with visual transformations could be susceptible to noise affecting specific parts of the frequency spectrum. AmpMix (Xu et al. 2023) linearly interpolates the amplitudes of two images while keeping the phase information unchanged to enhance the model’s ability to generalize. Furthermore, some studies attempt to combine image domain and frequency domain augmentation methods. PRIME (Modas et al. 2022) employs a combined augmentation approach that integrates both frequency domain and image domain techniques. AFA (Vaish, Wang, and Strisciuglio 2024) builds upon the approach of PRIME and further expands the integration of image domain and frequency domain augmentation techniques.
+
+![](images/5fdeb10bf2e7160f4295fa0bf287ececc2c3aeaf88c25373c191b7566ac89188.jpg)  
+Figure 2: An overview of PhysAug. The input of PhysAug is an RGB training image, and its output is an augmented image. The two important components in PhysAug are Global Non-uniform Illumination (Top) and Particle-induced Local Occlusion (Bottom).
+
+# Preliminary
+
+# Problem Formulation
+
+Single-domain generalization for object detection (SDGOD) aims to train the model on a single source domain while ensuring it performs well across multiple target domains (Wang et al. 2021). Given a labeled source domain $D _ { s } ~ = ~ \{ ( x _ { i } ^ { s } , y _ { i } ^ { s } ) \} _ { i = 1 } ^ { N _ { s } }$ and multiple unseen target domains $M = \left\{ D _ { t } ^ { 1 } , D _ { t } ^ { 2 } , \cdot \cdot \cdot , D _ { t } ^ { k } \right\}$ , where $D _ { t } ^ { n } = \{ ( x _ { i } ^ { t } ) \} _ { i = 1 } ^ { N _ { t } } ,$ , $N _ { s }$ and $N _ { t }$ denote the size of the source and target datasets respectively. The S-DGOD task is to train an object detector $F$ on the source domain $D _ { s }$ , and test its performance across target domains $M$ .
+
+# Evaluation Metrics
+
+We follow the settings established by (Michaelis et al. 2019), using mean average precision (mAP) as metrics to evaluate the performance of our method on the clean domain. Furthermore, we also use mean performance under corruption (mPC) established by (Lee et al. 2024) as metrics to evaluate our method’s performance on corrupted domains, which represents the average of mean average precision (mAP) across all corrupted domains and severity levels, the calculation is as follows.
+
+$$
+m P C = \frac { 1 } { N _ { C } } \sum _ { C = 1 } ^ { N _ { C } } ( \frac { 1 } { N _ { S } } \sum _ { S = 1 } ^ { N _ { S } } P _ { C , S } ) ,
+$$
+
+$P _ { C , S }$ is the target domain corrupted by corruption $C$ at severity $S$ , $N _ { S }$ and $N _ { C }$ means the number of severity and corruption. For DWD, the values for $N _ { s }$ , $N _ { c }$ are 1 and 4, for Cityscapes-C, the values are 5 and 15.
+
+# Methodology
+
+In this section, we introduce the design and implementation of PhysAug. First, we formulate the universal perturbation model from the theory of atmosphere optics. Based on the model, we derive our data augmentation method from a fourier perspective to explicitly simulate real-world variations for augmented data.
+
+# A Physical-based Perturbation Model
+
+Physical imaging models based on atmospheric optics have achieved great success in various low-level computer vision tasks (Li, Cheong, and Tan 2019). Retinex theory (Land and McCann 1971) is introduced to simplify the optical imaging process as a combination of the incident light image $L ( x )$ and the reflected light image $R ( x )$ , concentrating on the light propagation of Path1 and Path2 in Fig. 1(a). This can be represented by:
+
+$$
+I \left( x , y \right) = L \left( x , y \right) \cdot R \left( x , y \right) ,
+$$
+
+where $I ( x )$ is the observed image, $( x , y )$ is the image point. Retinex-based algorithms are designed to eliminate the effects of incident light to restore image quality, making them widely used for low-light enhancement tasks. The atmospheric scattering model (Nayar and Narasimhan 1999) is another popular approach to model physical imaging in foggy conditions. Its mathematical form is as follows:
+
+$$
+I \left( x , y \right) = t \left( x , y \right) \cdot J \left( x , y \right) + A \cdot \left[ 1 - t \left( x , y \right) \right] ,
+$$
+
+where $J ( x , y )$ represents the haze-free image, $A$ denotes the atmospheric light and $t ( x , y )$ is the transmission function. The first term of Eq. (3) indicates light scattering effects along the reflected light path, corresponding to Path2 in Fig. 1(a). The second term refers to changes in atmospheric light path (e.g., Path3). The above modeling methods focus on special cases of the physical imaging process for image restoration. In practice, the quality of optical imaging is influenced by the interactions of light with different types of particles along all three propagation paths. So we formulate a perturbation model for covering general cases of inferior
+
+imaging, which is defined as:
+
+$$
+\begin{array} { l } { { \displaystyle { I \left( x , y \right) = Q \cdot \left[ h _ { g } \left( x , y \right) + h _ { o } \left( x , y \right) \right] + A \cdot t _ { w } \left( x , y \right) } , } } \\ { { \displaystyle { h _ { g } \left( x , y \right) = t _ { g } \left( x , y \right) \cdot J \left( x , y \right) , } } } \\ { { \displaystyle { h _ { o } \left( x , y \right) = t _ { o } \left( x , y \right) \cdot \sum _ { i = 0 } ^ { n } P _ { i } } , } } \end{array}
+$$
+
+Let $Q$ denotes the incident light, and $A$ is the atmospheric light. $P _ { i }$ represents the set of non-transparent particles, where $\mathbf { \chi } _ { i }$ indicates the particle type (e.g., dust and water droplets) with $i \in [ 0 , 1 , \bar { \cdot \cdot \cdot } , n ]$ . The transmission functions $t _ { g } ( \bar { x } , y ) , t _ { o } ( x , y )$ and $t _ { w } ( x , y )$ correspond to the reflected image $J$ , the particle set $P _ { i }$ , and atmospheric light $A$ , respectively. $h _ { g } ( x , y )$ represents the global non-uniform illumination on the image $J ( x , y )$ due to light scattering and attenuation. $h _ { o } ( x , y )$ reflects local occlusion stemming from light reflection and absorption by non-transparent particles. These two components together account for the potential perturbations along the reflected light path. This model satisfies two key properties: (1) Completeness. All three light propagation paths are covered. (2) Heterogeneity. It considers interactions between light and a vareity of particles. We use this model to guide the design of PhysAug.
+
+# The Design of PhysAug
+
+Overview In this section, we introduce the implemental details of PhysAug. Based on Eq. (4), we define PhysAug as follows:
+
+$$
+\mathrm { P h y s A u g } \left( x \right) : = Q \cdot \left( \hat { h } _ { g } \left( x \right) + \hat { h } _ { o } \left( x \right) \right) + A ,
+$$
+
+where $\hat { h } _ { g } ( \cdot )$ and $\hat { h } _ { o } ( \cdot )$ denote the estimates of $h _ { g } ( \cdot )$ and $h _ { o } ( \cdot )$ , respectively. To simplify notation, we use $\varLambda$ to replace $A \cdot \dot { t } _ { w } \left( x , y \right)$ . Fig. 2 depicts the overall structure of PhysAug consisting of four components: The most significant components are non-uniform illumination $h _ { g }$ and local occlusions $h _ { o }$ along the reflected light path, as most visual degradation generates in this path. We adopt frequency-based pipelines to simulate these two components, as shown in Fig. 2. Besides, $Q$ and $\varLambda$ correspond to illumination changes from the incident light and atmospheric light path.
+
+Global Non-uniform Illumination Recent studies have shown that illumination information exhibits excellent separation properties in the image frequency domain, and is mainly concentrated in the low-frequency component (Vaish, Wang, and Strisciuglio 2024). So we apply the convolution with random kernels to the image, adjusting the amplitude spectrum of the low-frequency components to generate a diverse range of non-uniform illumination conditions. This operation is defined as:
+
+$$
+\begin{array} { r l } & { \hat { h } _ { g } \left( x , y \right) : = J \left( x , y \right) \ast G } \\ & { \qquad : = \mathcal { F } ^ { - 1 } \left\{ \mathcal { F } \left\{ J \left( x , y \right) \right\} \cdot \mathcal { F } \left\{ G \right\} \right\} . } \end{array}
+$$
+
+where $\mathcal { F }$ and $\mathcal { F } ^ { - 1 }$ represent the Fourier transform and the inverse Fourier transform, respectively. $G$ denotes a convolutional filter with a kernel size of $n \times n$ , and its parameters are drawn from a gaussian distribution. $^ *$ is the convolution operation.
+
+Partical-induced Local Occlusion It is well known that visible light consists of components of different wavelengths. Here, we consider that local occlusions are generated from a composite of single-wavelength light which undergoes reflection and absorption by interacting with stmospheric particles. Inspired by previous fourier-based analysis (Vaish, Wang, and Strisciuglio 2024; Chen et al. 2021; $\mathrm { { X u } }$ et al. 2023), we utilize the sinusoidal planar wave functions to simulate the occlusion case of single-wavelength light. The real part of planar wave function is defined as:
+
+$$
+\begin{array} { r l } & { { S ^ { P } } \left( x , y \right) = \Re \left( C \cdot { e ^ { j 2 \pi f \cdot T \left( \omega , \phi \right) } } \right) , } \\ & { \quad T ( \omega , \phi ) = x \cos \left( \omega \right) + y \sin \left( \omega \right) + \phi , } \end{array}
+$$
+
+where $C$ is a constraint to enforce a unit l2-norm of the planar wave. $\Re ( \cdot )$ denotes the real part. $T ( \cdot )$ is a regular function. $f$ and $\omega$ represent the frequency and phase, respectively. $\phi$ is set to a constant of $\textstyle { \frac { \pi } { n } }$ , where $\textit { n } \in \mathrm { ~ \mathbb { N } ~ }$ . $P$ denotes light of the specific wavelength, and in practice, we set $\bar { P } \in [ R , \bar { G } , B ]$ . Hence, we use $S ( x , { \bar { y } } ) \ =$ $[ S ^ { R } ( x , y ) , S ^ { G } ( x , y ) , \dot { S } ^ { B } ( x , \dot { y ) } ]$ to represent the operations on R,G,B channels. Finally, we introduce the composite function to construct local occlusions from multiple types of particles:
+
+$$
+\hat { h } _ { o } \left( x , y \right) = \sum _ { i = 0 } ^ { n } M _ { i } \cdot S _ { i } \left( x , y \right) ,
+$$
+
+where $i$ is the particle type. $M _ { i }$ denotes a random matrix of the same size as the image for diversifying the inconsistent properties of local occlusions. According to Eq. (7), we implement PhysAug to increase the diversity of augmented data. Its parameter settings are provided in the implementation details.
+
+# Experiments
+
+In this section, we first introduce the datasets and implement details. Then, we present our detailed experimental results on two standard S-DGOD datasets.
+
+# Datasets
+
+We evaluate our approach on two large-scale object detection datasets, Diverse Weather Dataset (DWD) and Cityscapes-C, following standard S-DGOD settings. DWD is an urban-scene detection dataset, which consists of five weather conditions, i.e., Daytime Sunny, Night Sunny, Night Rainy, Dusk Rainy and Daytime Foggy (Wu and Deng 2022). This Dataset is collected from multiple autonomous driving benchmarks (Yu et al. 2020; Sakaridis, Dai, and Van Gool 2018; Hassaballah et al. 2020). Daytime Sunny serves as a source domain containing 18,205 images for training and 8,313 for evaluation. Night Sunny, Night Rainy, Dusk Rainy and Daytime Foggy are used as unseen target domains, with 26, 158, 2, 494, 3, 501, and 3, 775 images, respectively. Cityscapes-C is a robust detection benchmark, which synthesizes 15 types of common corruptions with five severity levels based on the validation set of Cityscapes (Michaelis et al. 2019). These corruptions are categorized into four groups: Noise, Blur, Digital, and
+
+Table 1: Comparison with state-of-the-art methods on the Diverse Weather Dataset (DWD). OA-Mix and Div are data augmentation methods in OA-DG and DivAlign, respectively. The mPC indicates the average performance across four adverse weather conditions. Bold numbers represent the highest performance in each column, and underlined numbers indicate the second-highest rank. The results for Daytime Sunny are reported in mAP.   
+
+<html><body><table><tr><td></td><td>Daytime Sunny</td><td>Night Sunny</td><td>Dusk Rainy</td><td>Night Rainy</td><td>Daytime Foggy</td><td>mPC</td></tr><tr><td>Baseline</td><td>50.4</td><td>37.5</td><td>29.2</td><td>14.6</td><td>33.1</td><td>30.2</td></tr><tr><td>IBN-Net</td><td>49.7</td><td>32.1</td><td>26.1</td><td>14.3</td><td>29.6</td><td>25.5</td></tr><tr><td>SW</td><td>50.6</td><td>33.4</td><td>26.3</td><td>13.7</td><td>30.8</td><td>26.1</td></tr><tr><td>IterNorm</td><td>43.9</td><td>29.6</td><td>22.8</td><td>12.6</td><td>28.4</td><td>23.4</td></tr><tr><td>ISW</td><td>51.3</td><td>33.2</td><td>25.9</td><td>14.1</td><td>31.8</td><td>26.3</td></tr><tr><td>SHADE</td><td>1</td><td>33.9</td><td>29.5</td><td>16.8</td><td>33.4</td><td>28.4</td></tr><tr><td>CDSD</td><td>56.1</td><td>36.6</td><td>28.2</td><td>16.6</td><td>33.5</td><td>28.7</td></tr><tr><td>SRCD</td><td>1</td><td>36.7</td><td>28.8</td><td>17.0</td><td>35.9</td><td>29.6</td></tr><tr><td>Vidit et al.</td><td>51.3</td><td>36.9</td><td>32.3</td><td>18.7</td><td>38.5</td><td>31.6</td></tr><tr><td>OA-Mix</td><td>56.4</td><td>38.6</td><td>33.8</td><td>14.8</td><td>38.1</td><td>31.3</td></tr><tr><td>OA-DG</td><td>55.8</td><td>38.0</td><td>33.9</td><td>16.8</td><td>38.3</td><td>31.8</td></tr><tr><td>Div</td><td>50.6</td><td>39.4</td><td>37.0</td><td>22.0</td><td>35.6</td><td>33.5</td></tr><tr><td>DivAlign</td><td>52.8</td><td>42.5</td><td>38.1</td><td>24.1</td><td>37.2</td><td>35.5</td></tr><tr><td>UFR</td><td>58.6</td><td>40.8</td><td>33.2</td><td>19.2</td><td>39.6</td><td>33.2</td></tr><tr><td>PhysAug</td><td>60.2</td><td>44.9</td><td>41.2</td><td>23.1</td><td>40.8</td><td>37.5</td></tr></table></body></html>
+
+Weather. We use the training set of Cityscapes as the source domain, and corrupted images are regarded as unseen target domains for validation.
+
+# Implementation Details
+
+We first describe the implementation details of the proposed PhysAug. We set the filter $G$ in Eq. (8) as the size of $3 \times 3$ with a gaussian distribution $\mathcal { N } ( 0 , 4 )$ . The frequency $f$ and phase $\omega$ in Eq. (9) are both drawn from a uniform distribution $( - 5 1 2 , 5 1 2 )$ , and $\phi$ is $\frac { - \pi } { 4 }$ . The matrix $M _ { i }$ in Eq. (11) is sampled from 2D gaussian distribution $\mathcal { N } ( 0 , \Sigma )$ , where $\Sigma$ is an identical matrix with the same size as the image. $Q$ is set to 1 to indicate a constant incident light coefficient. Following the atmospheric scattering model, $\Lambda$ represents the attenuation effects of atmospheric light, given by $\Lambda = L _ { \infty } ( 1 - e ^ { ( - d ) } )$ , and $L _ { \infty }$ is the atmospheric light at infinity, which is set to $1 0 ^ { - 1 }$ (Nayar and Narasimhan 1999). We sample $d$ from a uniform distribution $( 0 , 1 0 )$ . For DWD dataset, we adopt the setting up in CDSD (Wu and Deng 2022) and OA-DG (Lee et al. 2024). Specifically, we use Faster R-CNN (Ren et al. 2015) with a ResNet101 (He et al. 2016) backbone, and employ the SGD optimizer with a momentum of 0.9 and a weight decay of 0.0001. The learning rate is set to 0.001, and the batch size is 2. All other configurations align with those in the CDSD and OA-DG. For Cityscapes-C, we use Faster R-CNN (Ren et al. 2015) with a ResNet50 (He et al. 2016) backbone and feature pyramid networks (FPN) (Lin et al. 2017) as the baseline model. The learning rate is set to 0.01, with a batch size of 8. The SGD optimizer is employed with a momentum of 0.9 and a weight decay of 0.0001. All experiments are conducted on NVIDIA RTX 3090 GPU.
+
+# Performance on Diverse Weather Conditions
+
+We evaluate PhysAug and other the state-of-the-art methods on DWD dataset, including SW (Pan et al. 2019), IBN-Net (Pan et al. 2019), IterNorm (Huang et al. 2019), ISW (Choi et al. 2021), SHADE (Zhao et al. 2022), Clip the Gap (Vidit, Engilberge, and Salzmann 2023), OA-DG (Lee et al. 2024), DivAlign (Danish et al. 2024), and UFR (Liu et al. 2024). Note that Div and OA-Mix are data augmentation methods in DivAlign and OA-DG, respectively. Table 1 reports their performances on five different scenarios. We can see that PhysAug achieves the best detection accuracy of $6 0 . 2 \ \mathrm { m A P }$ in Daytime Sunny, $\mathrm { 4 4 . 9 \ m A P }$ in Night Sunny, $4 1 . 2 \mathrm { m A P }$ in Dusk Rainy, and $4 0 . 8 \mathrm { m A P }$ in Daytime Foggy, respectively. Overall, our method obtains the largest improvement of $7 . 3 \mathrm { m P C }$ compared with the baseline detector in adverse weather conditions.
+
+# Performance on Common Corruptions
+
+To further prove the generality of our proposed PhysAug, we also compare PhysAug with popular data augmentation approaches on Cityscapes-C, including Cutout (DeVries and Taylor 2017), PhotoDistort (Redmon and Farhadi 2018), AutoAug (Zoph et al. 2020), AugMix (Hendrycks et al. 2019), StylizedAug (Geirhos et al. 2018). Besides, we select other three methods that combine data augmentation with loss function, SupCon (Khosla et al. 2020), FSCE (Sun et al. 2021) and OA-DG (Lee et al. 2024) for comparison. These results are summarized in Table 2. It is noted that our proposed PhysAug achieves the state-of-the-art performance, improving by an average of $7 . 2 ~ \mathrm { m P C }$ over the baseline detector. Besides, we can find that our method performs better on Noise and Blur corruption types, with the best result of $1 7 . 0 \ \mathrm { m A P }$ on Shot Noise, and $2 5 . 5 \ \mathrm { m A P }$ on Motion Blur, respectively.
+
+Table 2: The performance comparison with state-of-the-art methods on Cityscapes-C. The mPC is the average performance across 15 corruption types, each evaluated at 5 different severity levels. Numbers in bold represent the highest rank, and underlined numbers indicate the second highest rank.   
+
+<html><body><table><tr><td rowspan="2">Method</td><td rowspan="2">Clean</td><td colspan="3">Noise</td><td colspan="3">Blur</td><td colspan="3">Weather</td><td colspan="3"></td><td colspan="3">Digital</td><td rowspan="2">mPC</td></tr><tr><td></td><td>Gauss Shot Impulse</td><td></td><td>Defocus</td><td></td><td>Glass Motion</td><td>Zoom Snow</td><td></td><td>Frost Fog</td><td></td><td>Bright Contrast Elastic Pixel JPEG</td><td></td><td></td><td></td><td></td></tr><tr><td>baseline</td><td>42.2</td><td>0.5</td><td>1.1</td><td>1.1</td><td>17.2</td><td>16.5</td><td>18.3</td><td>2.1</td><td>2.2</td><td>12.3</td><td>29.8</td><td>32.0</td><td>24.1</td><td>40.1</td><td>18.7</td><td>15.1</td><td>15.4</td></tr><tr><td></td><td>+Data augmentation</td><td colspan="10"></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>Cutout</td><td>42.5</td><td>0.6</td><td>1.2</td><td>1.2</td><td>17.8</td><td>15.9</td><td>18.9</td><td>2.0</td><td>2.5</td><td>13.6</td><td>29.8</td><td>32.3</td><td>24.6</td><td>40.1</td><td>18.9</td><td>15.6</td><td>15.7</td></tr><tr><td>PhotoDistort</td><td>42.7</td><td>1.6</td><td>2.7</td><td>1.9</td><td>17.9</td><td>14.1</td><td>18.7</td><td>2.0</td><td>2.4</td><td>16.536.0</td><td></td><td>39.1</td><td>27.1</td><td>39.7</td><td>18.0</td><td>16.4</td><td>16.9</td></tr><tr><td>AutoAug</td><td>42.4</td><td>0.9</td><td>1.6</td><td>0.9</td><td>16.8</td><td>14.4</td><td>18.9</td><td>2.0</td><td>1.9</td><td>16.0</td><td>32.9</td><td>35.2</td><td>26.3</td><td>39.4</td><td>17.9</td><td>11.6</td><td>15.8</td></tr><tr><td>AugMix</td><td>39.5</td><td>5.0</td><td>6.8</td><td>5.1</td><td>18.3</td><td>18.1</td><td>19.3</td><td>6.2</td><td>5.0</td><td>20.531.2</td><td></td><td>33.7</td><td>25.6</td><td>37.4</td><td>20.3</td><td>19.6</td><td>18.1</td></tr><tr><td>StylizedAug</td><td>36.3</td><td>4.8</td><td>6.8</td><td>4.3</td><td>19.5</td><td>18.7</td><td>18.5</td><td>2.7</td><td>3.5</td><td>17.0 30.5</td><td></td><td>31.9</td><td>22.7</td><td>33.9</td><td>22.6</td><td>20.8</td><td>17.2</td></tr><tr><td>OA-Mix</td><td>42.7</td><td>7.2</td><td>9.6</td><td>7.7</td><td>22.8</td><td>18.8</td><td>21.9</td><td>5.4</td><td>5.2</td><td>23.6</td><td>37.3</td><td>38.7</td><td>31.9</td><td>40.2</td><td>22.2</td><td>20.2</td><td>20.8</td></tr><tr><td colspan="14">+Loss function</td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>SupCon</td><td>43.2</td><td>7.0</td><td>9.5</td><td>7.4</td><td>22.6</td><td>20.2</td><td>22.3</td><td>4.3</td><td>5.3</td><td>23.0</td><td>37.3</td><td>38.9</td><td>31.6</td><td>40.1</td><td>24.0</td><td>20.1</td><td>20.9</td></tr><tr><td>FSCE</td><td>43.1</td><td>7.4</td><td>10.2</td><td>8.2</td><td>23.3</td><td>20.3</td><td>21.5</td><td>4.8</td><td>5.6</td><td>23.6 37.1</td><td></td><td>38.0</td><td>31.9</td><td>40.0</td><td>23.2</td><td>20.4</td><td>21.0</td></tr><tr><td>OA-DG</td><td>43.4</td><td>8.2</td><td>10.6</td><td>8.4</td><td>24.6</td><td>20.5</td><td>22.3</td><td>4.8</td><td>6.1</td><td>25.0</td><td>38.4</td><td>39.7</td><td>32.8</td><td>40.2</td><td>23.8</td><td>22.0</td><td>21.8</td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>Ours</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>PhysAug</td><td>42.6</td><td>14.3</td><td>17.0</td><td>11.9</td><td>25.6</td><td>19.1</td><td>25.5</td><td>3.9</td><td>8.6</td><td>21.3</td><td>35.3</td><td>39.5</td><td>27.5</td><td>39.1</td><td>28.9</td><td>19.9</td><td>22.6</td></tr></table></body></html>
+
+Table 3: The performance comparison of each component in PhysAug on the DWD and Cityscapes-C datasets.   
+
+<html><body><table><tr><td>Non-uniformIllumination</td><td>Local Occlusion</td><td>mAP</td><td>mPC</td></tr><tr><td colspan="4">DWD</td></tr><tr><td>X</td><td>X</td><td>50.4</td><td>30.2</td></tr><tr><td>√</td><td>X</td><td>60.4</td><td>36.5</td></tr><tr><td>X</td><td>√</td><td>60.6</td><td>35.2</td></tr><tr><td>√</td><td>√</td><td>60.2</td><td>37.5</td></tr><tr><td colspan="4">Cityscapes-C</td></tr><tr><td></td><td>X</td><td>42.2</td><td>15.4</td></tr><tr><td>√</td><td>X</td><td>42.4</td><td>20.5</td></tr><tr><td></td><td>√</td><td>43.0</td><td>20.2</td></tr><tr><td>√</td><td>√</td><td>42.6</td><td>22.6</td></tr></table></body></html>
+
+# Dicussion
+
+# Ablation Studies
+
+In this section, we conduct ablation studies to analyze the efficacy of the proposed PhysAug and highlight the benefits of guidance from physical-based modeling.
+
+PhysAug We now perform additional ablation experiments to study the impact of different components of the proposed PhysAug. Specifically, we compare the use of global non-uniform illumination in Eq. (8) and particleinduced local occlusions in Eq. (10). Table 3 reports on our results on DWD and Cityscapes-C dataset. For DWD dataset, each component can still obtain improvements of above $\mathrm { 5 } \mathrm { m P C }$ in adverse weather conditions, indicating their versatility. The best performance is achieved with all components activated. One can see similar improvements of each component in Cityscape-C dataset, which validates the efficacy of the proposed method.
+
+Table 4: The comparison of physical-based and nonphysical-based modeling on the Cityscapes-C dataset.   
+
+<html><body><table><tr><td></td><td>Physical-basedmodeling</td><td>mAP</td><td>mPC</td></tr><tr><td>Baseline</td><td>1</td><td>42.2</td><td>15.4</td></tr><tr><td>NPM1</td><td>X</td><td>42.5</td><td>22.2</td></tr><tr><td>NPM2</td><td>X</td><td>42.2</td><td>19.4</td></tr><tr><td>PhysAug</td><td>√</td><td>42.6</td><td>22.6</td></tr></table></body></html>
+
+Physical-based Modeling This experiment aims to validate the benefits of physical-based modeling. So we construct two non-physical models for comparison. These models are as follows:
+
+$$
+\begin{array} { c } { { I \left( x , y \right) = Q \cdot \left[ h _ { g } \left( x , y \right) + h _ { o } \left( x , y \right) \right] , } } \\ { { I \left( x , y \right) = \lambda \cdot Q \cdot \left[ h _ { g } \left( x , y \right) + h _ { o } \left( x , y \right) \right] } } \\ { { + \left( 1 - \lambda \right) \cdot J \left( x , y \right) + L } } \end{array}
+$$
+
+where $\lambda$ is the mixing factor. we name the models derived from Eq. (12) and Eq. (13) as NPM1 and NPM2. NPM1 neglects the negative effect of the atmospheric light path, and NPM2 follows the MixUp-style (Zhang et al. 2017) to mix the non-corruption image based on Eq. (4). We compare the performance of PhysAug with NPM1 and NPM2 on the Cityscapes-C dataset, as shown in Table 4. The results show that PhysAug achieves the largest performance gains on corrupted domains, with $0 . 4 \mathrm { - 3 . 2 m P C }$ improvements on NPM1 and NPM2, respectively.
+
+# Qualitative Analysis
+
+In this section, we further perform visualizations and feature assessment of our method to see how exactly it works.
+
+Visualization Analysis In Fig. 3, we provide visualized object detection examples of the baseline method, OAMix and the proposed PhysAug on four adverse weather conditions. We can see that compared with the baseline method and OA-Mix, PhysAug can largely reduce the rate of false and missing detection in the image. Although night rainy weather is full of challenge, our method can localize and recognize these small and obscure persons accurately, which further demonstrates the effectiveness of the proposed PhysAug.
+
+![](images/67e2933a14896c903e9518e668b234803e6fb0b73b4d1b0c756162b4cd551806.jpg)  
+Figure 3: Visualized detection samples of the baseline method, OA-Mix and PhysAug in different weather conditions
+
+![](images/c01052681967f0b4606c195575893542581008348814d9461856d84e87d8a29d.jpg)  
+Figure 4: Heatmaps comparison in a night-rainy scenario. Top-left: original image. Top-right: The baseline method. Bottom-left: OA-Mix. Bottom-right: PhysAug.
+
+Feature Analysis The heatmaps in Fig. 4 highlight the effectiveness of PhysAug in comparison to baseline and OAMix methods under challenging nighttime rainy conditions. The baseline method shows weak focus and sparse heatmap activation, indicating a limited ability to localize key objects such as vehicles in poor-visibility environments. OAMix improves target detection with more concentrated heatmap regions, particularly around the primary vehicle, but still leaves peripheral areas underrepresented. In contrast, PhysAug demonstrates significantly enhanced detection performance, with highly concentrated and precise heatmap activations around the vehicles under adverse visual conditions. These results suggest that PhysAug effectively captures spatial and frequency-based features, resulting in superior object localization and robustness.
+
+# Conclusion
+
+In this paper, we propose PhysAug, a novel data augmentation method for single-domain generalized object detection. To achieve this goal, we introduce a universal perturbation model from the theory of atmospheric optics to describe the general case of the inferior imaging process. Guided by this model, PhysAug simulates real-world variations caused by atmospheric particles to diversify training data. We conduct extensive qualitative and quantitative experiments to demonstrate the effectiveness of our method for the S-DGOD task. Results also show that PhysAug outperforms the state-ofthe-art by a large margin.

@@ -1,0 +1,207 @@
+# Efficient 3D Recognition with Event-driven Spike Sparse Convolution
+
+Xuerui $\mathbf { Q i u } ^ { 1 , 2 }$ , Man Yao1∗, Jieyuan Zhang4, Yuhong Chou1,5, Ning Qiao6, Shibo Zhou7, Bo ${ \bf X } { \bf u } ^ { 1 }$ , Guoqi Li1,3,8∗
+
+# Abstract
+
+Spiking Neural Networks (SNNs) provide an energy-efficient way to extract 3D spatio-temporal features. Point clouds are sparse 3D spatial data, which suggests that SNNs should be well-suited for processing them. However, when applying SNNs to point clouds, they often exhibit limited performance and fewer application scenarios. We attribute this to inappropriate preprocessing and feature extraction methods. To address this issue, we first introduce the Spike Voxel Coding (SVC) scheme, which encodes the 3D point clouds into a sparse spike train space, reducing the storage requirements and saving time on point cloud preprocessing. Then, we propose a Spike Sparse Convolution (SSC) model for efficiently extracting 3D sparse point cloud features. Combining SVC and SSC, we design an efficient 3D SNN backbone (E-3DSNN), which is friendly with neuromorphic hardware. For instance, SSC can be implemented on neuromorphic chips with only minor modifications to the addressing function of vanilla spike convolution. Experiments on ModelNet40, KITTI, and Semantic KITTI datasets demonstrate that E-3DSNN achieves state-of-the-art (SOTA) results with remarkable efficiency. Notably, our E-3DSNN (1.87M) obtained $9 1 . 7 \%$ top-1 accuracy on ModelNet40, surpassing the current best SNN baselines (14.3M) by $3 . 0 \%$ . To our best knowledge, it is the first direct training 3D SNN backbone that can simultaneously handle various 3D computer vision tasks (e.g., classification, detection, and segmentation) with an event-driven nature.
+
+Code — https://github.com/bollossom/E-3DSNN/
+
+# Introduction
+
+3D recognition has been a highly researched area due to its wide applications in autonomous driving (Cui et al. 2021), virtual reality (Zhu et al. 2024), and robotics (Pomerleau et al. 2015). However, these methods involve numerous operations, leading to high computational costs and energy consumption, which limits their deployment on resource-constrained devices. Bio-inspired Spiking Neural Networks (SNNs) provide an energy-efficient way to extract features from 3D event streams due to their unique event-driven nature and spatiotemporal dynamics (Maass 1997; Roy et al. 2019; Li et al. 2023). For instance, the Speck (Yao et al. 2024c) chip uses event-by-event sparse processing to handle event streams, with operational power consumption as low as $0 . 7 \mathrm { m W }$ Point clouds and event streams are both sparse 3D data, which theoretically suggests that SNNs should be well-suited for processing 3D sparse point clouds. However, when applying SNNs to point clouds, they often exhibit limited performance and fewer application scenarios in most cases.
+
+For instance, most applications of SNN algorithms (Lan et al. 2023; Wu et al. 2024a; Ren et al. 2024) in 3D recognition are limited to simple 3D classification tasks with toy model datasets (Wu et al. 2015) and the performance gap between these works and ANNs is significant. To better apply the SNNs in the efficient 3D recognition field, we identify the key issues in the SNN processing of point clouds. The first is the appropriate preprocessing method. Vanilla methods (Ren et al. 2024; Wu et al. 2024b) use point-based methods to process input point clouds, the inherent sparsity of SNNs can obscure local geometric information, and the high computational load makes training on large datasets time-consuming. The second is selecting efficient feature extraction tools. 3D data itself has high redundancy. While SNNs use 2D spike convolution effectively for event streams, applying it to 3D sparse point clouds results in cubic growth in computational complexity as it calculates each point. This makes feature extraction inefficient and challenging.
+
+In this work, we aim to address the above issues in a unified manner. Our goal is to highlight the low power consumption and distinct sparse event-driven advantages of SNNs. We accomplish this through two main approaches. First, we propose a Spike Voxel Coding (SVC) scheme for processing point clouds. As shown in Fig. 2, SVC can encode the 3D point clouds into sparse and spatio-temporal spike trains, reducing the storage requirements and saving time on point cloud preprocessing. Second, we propose a Spike Sparse Convolution (SSC) block for extracting 3D point cloud features, which leverages sparsity to reduce redundant computations on background points and avoids the densification issues associated with vanilla spike convolution. As shown in Fig. 3, SSC adds just one extra condition compared to the Vanilla Spike Convolution (VSC). Because of their similarities, SSC can be implemented on neuromorphic chips with only minor modifications to the VSC addressing function. Finally, leveraging SVC and SSC, we redesigned an efficient 3D SNN backbone (E-3DSNN) using residual connections between membrane potentials, as shown in Fig. 1. To demonstrate the effectiveness of E-3DSNN, we evaluate our models on the simple ModelNet40 (Wu et al. 2015) and two large-scale benchmarks (e.g., KITTI (Geiger et al. 2012a) and Semantic KITTI (Behley et al. 2019) datasets). E-3DSNN achieves leading performance with high efficiency with only sparse ACcumulate (AC) in SNNs. Our main contribution can be summarized as:
+
+![](images/1ec8de91172c01bcfb8a2a30e833c44ce224009f7a54b115a850c945872b0aee.jpg)  
+Figure 1: The workflow of our efficient 3D SNN backbone (E-3DSNN), which uses residual connections between membrane potentials and handles various 3D computer vision tasks with only sparse ACcumulate. It consists of two main components: the Spike Voxel Coding (SSC) and Spike Sparse Convolution (SSC). The SVC scheme first voxelizes the input 3D points. Then, the voxelized data is transformed into spatio-temporal spike trains using sparse convolution and spiking neurons. The SSC block only calculates the overlapping activation features between the center of the point cloud and the convolution kernel.
+
+• We introduce the SVC scheme and SSC block, enhancing SNN efficiency and performance in processing 3D point clouds. SVC converts point clouds to sparse spike trains, while SSC extracts effective representations from them. • We explore suitable architectures in SNNs and redesigned LiDAR-based 3D SNN backbone by residual connections between membrane potentials, handling various 3D computer vision tasks with sparse AC operation. • Experiments demonstrate that our E-3DSNN achieves outstanding accuracy with remarkable efficiency up to $1 1 \times$ on various datasets (e.g., ModelNet40, KITTI, and semantic KITTI), revealing the potential of SNNs in efficient 3D recognition.
+
+# Related Works
+
+# SNN Training and Architecture Design
+
+The development of SNNs has long been hindered by the challenge of training non-differentiable binary spikes. To address this, researchers have focused on improving training methods and architectural designs. Recently, two primary methods for training high-performance SNNs have emerged.
+
+One approach is to convert ANNs into spike form through neuron equivalence (Li et al. 2021), known as ANN-to-SNN conversion. However, this method requires long simulation time steps and increases energy consumption. We employ the direct training method (Wu et al. 2018).
+
+Regarding architectural design, Spiking ResNet (Fang et al. 2021; Shan et al. 2023) has long dominated the SNN field because residual learning (He et al. 2016a) can address the performance degradation of SNNs as they deepen. The main differences among these are the locations of shortcuts and their ability to achieve identity mapping (He et al. 2016b). Notably, MS-ResNet (Hu et al. 2024b; Qiu et al. 2024) maintains high performance while preserving the spike-driven sparse addition nature of SNNs by establishing residual connections between membrane potentials. Our E-3DSNN design draws on this idea and extends it to the 3D scene.
+
+# Feature Extractors on LiDAR-based 3D Recognition
+
+The key challenge in LiDAR-based 3D recognition is learning effective representations from sparse and irregular 3D geometric data. Currently, there exist two main approaches. Point-based methods (Qi et al. 2017; Zhao et al. 2021) utilize the PointNet series to directly extract geometric features from raw point clouds and make predictions. However, these methods require computationally intensive point sampling and neighbor search procedures. Additionally, in 3D scenes, numerous background points unrelated to the task contribute to redundant computations at each stage. Voxel-based methods (Wu et al. 2015; Choy et al. 2019; Zhou et al. 2018) first convert the point cloud into regular voxels and then use 3D sparse convolutions for feature extraction. Due to its efficiency advantages, this approach has been widely applied to various 3D tasks. Nevertheless, the improved accuracy is often accompanied by increased computational costs, limiting its applicability in practical systems. However, as voxel resolution increases, both computational costs and memory requirements grow cubically.
+
+Numerous studies (Lan et al. 2023; Ren et al. 2024; Wu et al. 2024b) in the SNN field combine spiking neurons with Point-based methods like PointNet. These methods have been successfully applied to simple datasets with shallow networks, but achieving high performance becomes more challenging as datasets and networks become larger and more complex, which restricts SNNs’ application in 3D recognition. This is due to their oversight of SNNs’ inherent sparsity, which can obscure local geometric information, and the high computational load of point-based methods, resulting in lengthy training times on large datasets. We adopt a voxel-based approach for point cloud processing and leverage the sparse nature of spiking neurons to reduce unnecessary computation costs caused by 3D spatial redundancy.
+
+# Efficient 3D Recognition SNN Backbone
+
+In this section, we begin by briefly introducing the spike neuron layer, followed by the Spike Voxel Coding (SVC) and the Spike Sparse Convolution (SSC). Finally, we introduce our general efficient 3D recognition SNN backbone (E-3DSNN).
+
+# Leaky Integrate-and-Fire Spiking Neuron
+
+The Leaky Integrate-and-Fire (LIF) spiking neuron is the most popular neuron to balance bio-plausibility and computing complexity (Maass 1997). We first translate the LIF spiking neuron to an iterative expression with the Euler method (Wu et al. 2018), which can be described as:
+
+$$
+\begin{array} { r l } & { { U ^ { t , n } } = H ^ { t - 1 , n } + f ( W ^ { n } , X ^ { t , n - 1 } ) , } \\ & { { S ^ { t , n } } = \Theta ( { U ^ { t , n } } - { V _ { t h } } ) , } \\ & { { H ^ { t , n } } = \beta ( { U ^ { t , n } } - { S ^ { t , n } } ) , } \end{array}
+$$
+
+where $\beta$ is the time constant, $t$ and $n$ respectively represent the indices of the time step and the $n$ -th layer, $W$ denotes synaptic weight matrix between two adjacent layers, $f ( \cdot )$ is the function operation stands for convolution or fully connected layer, $X$ is the input, and $\Theta ( \cdot )$ is the Heaviside function. When the membrane potential $U$ exceeds the firing threshold $V _ { t h }$ , the LIF neuron will trigger a spike $S$ .
+
+However, converting the membrane potential of spiking neurons into binary spikes introduces inherent quantization errors, which significantly limit the model’s expressiveness. To reduce the quantization error, we incorporate the Integer LIF (I-LIF) neuron (Luo et al. 2024) into our E-3DSNN, allowing us to rewrite Eq. (2) as:
+
+$$
+S ^ { t , n } = \lfloor \mathrm { c l i p } \{ U ^ { t , n } , 0 , D \} \rceil ,
+$$
+
+where $\lfloor \cdot \rceil$ denotes the rounding operator, $\mathrm { c l i p } \{ x , a , b \}$ confines $x$ within range $[ a , b ]$ , and $D$ is a hyperparameter indicating the maximum emitted integer value by I-LIF. In the backpropagation stage, the Eq. (2) is non-differentiable. Previous studies have introduced various surrogate gradient functions ( $\mathrm { W u }$ et al. 2018; Neftci, Mostafa, and Zenke 2019), primarily designed to address binary spike outputs. In our approach, we consistently utilize rectangular windows as the surrogate function. For simplicity, we retain gradients only for neurons activated within the $[ 0 , D ]$ range, setting all others to zero. Moreover, I-LIF will emit integer values while training, and convert them into 0/1 spikes by expanding the virtual timestep to ensure that the inference is spike-driven with only sparse addition.
+
+![](images/f07db7aaedb066d18bc7aac54c31acd3bcc78697a001c46cadae1c385886242b.jpg)  
+Figure 2: Comparison of different point cloud pre-processing ways in SNN. (a) The vanilla point-based method (Lan et al. 2023; Ren et al. 2024; Wu et al. 2024a) directly processes raw points, but the inherent sparsity of SNNs can obscure local geometric details. (b) We proposed a spike voxel coding (SVC) scheme, which leverages the sparsity of SNNs and, after additional voxelization pretreatment, can handle structural data with higher efficiency and lower power consumption.
+
+# Spike Voxel Coding
+
+In this section, we proposed a Spike Voxel Coding (SVC) scheme for efficiently transforming point clouds into spatiotemporal voxelized spike trains (Qiu et al. 2023). The overall process of SVC processing a 3D point cloud is as follows.
+
+First, consider the input is a 3D point set with sparse voxelized 3D scene representation $\mathcal { V } \overset { \vartriangle } { = } \{ \mathcal { P } , \mathcal { I } \}$ . It contains voxels sets $V _ { k } ^ { t } = \{ P _ { k } ^ { t } , \dot { I } _ { k } ^ { t } \}$ , where $P _ { k } ^ { t } \in \mathbb { R } ^ { 3 }$ represents the 3D coordinates and $I _ { k } ^ { t } \in \mathbb { R } ^ { d }$ is the corresponding feature with $d$ channels at timestep $t$ . Next, we divide the global voxel set $\nu$ into $N$ non-overlapping voxel grids $[ \mathcal { V } _ { 1 } ^ { t } , \bar { \mathcal { V } } _ { 2 } ^ { t } , \dots , \mathcal { V } _ { N } ^ { t } ] , \mathcal { V } _ { i } ^ { t } =$ $\{ V _ { j } ^ { t } \mid P _ { j } ^ { t } \in \Phi ^ { t } ( i ) \bar  \}$ , where $\mathcal { V } _ { i } ^ { t }$ represents the $i$ -th voxel grid and $\Phi ^ { t } ( i )$ means the index range of the $i$ -th voxel grid at timestep $t$ . Then we encode these voxel grids into spike trains, which can be expressed as:
+
+$$
+\begin{array} { r } { \pmb { S } = \pmb { S } \pmb { \mathcal { N } } ^ { m } ( \mathcal { F } ^ { m } ( \mathcal { V } ) ) , } \end{array}
+$$
+
+where $\mathcal { S } \mathcal { N } ^ { m }$ and $\mathcal { F } ( \cdot ) ^ { m }$ is $m$ consecutive I-LIF spiking neuron and sparse convolution, respectively. And $s \ =$ $[ S _ { 1 } ^ { t } , S _ { 2 } ^ { t } , \ldots , S _ { N } ^ { \dot { t } } ]$ is a set of output spike trains. After our SVC, we obtain a sparse spiking representation $s$ of the input 3D point cloud, which can reduce the storage requirements.
+
+# Spike Sparse Convolution
+
+Vanilla Spike Convolution (VSC) is performed on neuromorphic chips in a spike-driven manner. Then we will introduce how the VSC extracts 3D features. Consider weight $\mathbf { \nabla } W ^ { t }$ contains $c _ { \mathrm { i n } } \times c _ { \mathrm { o u t } }$ spatial kernels $K$ and $S _ { p } ^ { t }$ as an input feature with $t$ timestep at position $p$ , VSC can be expressed by:
+
+$$
+U ^ { t } = \sum _ { k \in K ^ { 3 } } W _ { k } \cdot S _ { \vec { p } _ { k } } ^ { t } ,
+$$
+
+Here $U ^ { t }$ is the output membrane potential and $\vec { p _ { k } }$ is the position offset around center $p$ , which can be expressed by:
+
+$$
+{ \vec { p } } _ { k } = p + k = ( p _ { x } + k _ { x } , p _ { y } + k _ { y } , p _ { z } + k _ { z } ) ,
+$$
+
+![](images/af431e4281d78592db8f1d87182227caa4485824d4651d56315cb44571407e2b.jpg)  
+Figure 3: Comparison of Spike Sparse Conv (SSC) and Vanilla Spike Conv (VSC). Inputs and outputs are shown as 2D features for simplicity: green for activation, red for spikes, and white for no activation. On a neuromorphic chip, when a spike occurs, the address mapping function finds the synapses and neurons that need to be added and then takes out the corresponding weights to perform the addition operations. The only difference between VSC and SSC is the addressing mapping function. In SSC, it is specified that the convolution is performed only if there is a spike input at the position corresponding to $W _ { 4 }$ (the center position of the convolution kernel). VSC does not have this restriction.
+
+where $k$ represents the kernel offset that enumerates all the discrete positions within the 3D kernel space $K ^ { 3 }$ .
+
+Spike Sparse Convolution (SSC) VSC performs well in 2D scenes. However, in the 3D sparse point cloud, it needs to calculate each point and the computational complexity grows cubically when processing the point cloud, making it difficult to extract features efficiently. To address this issue, we propose Spike Sparse Convolution (SSC), which performs only on the key spiking locations, significantly reducing the computational requirements. It can be expressed by:
+
+$$
+U _ { p } ^ { t } = \sum _ { k \in K ^ { d } } \alpha ( W _ { k } \cdot S _ { \vec { p } _ { k } } ^ { t } ) ,
+$$
+
+where $\alpha \in \{ 0 , 1 \}$ is a selector. When the center $p \in S ^ { t }$ is the active binary spike, $\alpha$ equals 1, indicating that the position $p$ participates in the computation. $\alpha = 0$ is the opposite. As depicted in Fig. 3, SSC only has one more judgment condition than VSC when performing spike convolution. Given the commonality of VSC and SSC, we only need to slightly modify the addressing mapping function corresponding to VSC to execute SSC on the neuromorphic chip.
+
+The specific process is as follows. Upon the reception of a spike, the SNN core first builds a rulebook, which records the activation spikes and the corresponding kernels space $K ^ { 3 } ( p , P _ { \mathrm { i n } } )$ . The kernel space is a subset of ${ \bf \bar { \cal K } } ^ { 3 }$ , leaving out the empty position. It is conditioned on the position $p$ and input feature space $P _ { \mathrm { i n } }$ as:
+
+$$
+K ^ { 3 } ( p , P _ { \mathrm { i n } } ) = \left\{ k | p + k \in P _ { \mathrm { i n } } , k \in K ^ { 3 } \right\} .
+$$
+
+Then the rulebook searches for and identifies the corresponding synaptic weights and the positions of the target neurons, and adds them together.
+
+# Overall Architecture
+
+Fig. 1 shows the overview of our hieratical 3D Computer Vision SNN Backbone (E-3DSNN). Drawing inspiration of MS-ResNet (Hu et al. 2024b), we establish residual connections between the membrane potentials of spiking neurons. This avoids the common spike degradation issue (Yao et al. 2023) in SNNs and ensures that the network remains spikedriven during inference (Yao et al. 2024a,b). Considering the input is a 3D point set with a sparse voxelized 3D scene representation $\nu$ , our E-3DSNN can be formulated as follows:
+
+$$
+\begin{array} { r l } & { { \mathcal { S } } ^ { t , 0 } = { \mathcal { C } } ( \mathcal { V } ) , } \\ & { { U } ^ { t , l } = { \mathcal { B } } ^ { l } ( \mathrm { D o w n } ^ { l } \{ S ^ { t , 0 } \} ) , } \\ & { { U } ^ { t , l + 1 } = { \mathcal { B } } ^ { l + 1 } ( \mathrm { D o w n } ^ { l + 1 } \{ U ^ { t , l } \} ) , } \end{array}
+$$
+
+where $ { \mathcal { C } } ( \cdot )$ denotes spike voxel coding, and $l = 1 , \cdots , L$ represents the layer number, with $L$ equal to 4 in our study. $\mathrm { D o w n } ( \cdot )$ is the downsample layer, which consists of a spiking neuron and a spike sparse convolution. Both the kernel size and stride are set to 2, reducing the spatial size to $\frac { 1 } { 8 }$ with each operation. $\boldsymbol { B } ( \cdot )$ is the basic spike sparse block. Considering the input of the basic spiking sparse block is $U$ , this block can be expressed as:
+
+$$
+\begin{array} { l } { { U ^ { \prime } = \mathrm { S S C } \{ S \mathcal { N } ( U ) \} + U , } } \\ { { U ^ { \prime \prime } = \mathrm { S S C } ^ { m } \{ S \mathcal { N } ^ { m } ( U ^ { \prime } ) \} , } } \end{array}
+$$
+
+where $\mathsf { S S C } ^ { m }$ and $\mathcal { S } \mathcal { N } ^ { m }$ indicate $m$ consecutive spike sparse convolution and spiking neurons, which is set to 2 in our study. The kernel size of SSC and stride are set to 3 and 1, respectively.
+
+# Theoretical Energy Consumption
+
+The 3DSNN architecture can transform matrix multiplication into sparse addition, which can be implemented as an addressable addition on neuromorphic chips. In the spike voxel coding layer, convolution operations serve as MAC operations that convert analog inputs into spikes, similar to direct coding-based SNNs (Wu et al. 2019). Conversely, in SNN’s architecture, the Conv or FC layer transmits spikes and performs AC operations to accumulate weights for postsynaptic neurons. Additionally, the inference energy cost of E-3DSNN can be expressed as follows:
+
+$$
+E _ { t o t a l } = E _ { M A C } \cdot F L _ { c o n v } ^ { 1 } + E _ { A C } \cdot T \sum _ { n = 2 } ^ { N } F L _ { c o n v } ^ { n } \cdot f r ^ { n } ,
+$$
+
+where $N$ and $M$ are the total number of spike sparse conv, $E _ { M A C }$ and $E _ { A C }$ are the energy costs of MAC and AC operations, and $f r ^ { m } , f r ^ { n } , F L _ { c o n v } ^ { n }$ and $F L _ { f c } ^ { m }$ are the firing rate and FLOPs of the $n$ -th spike sparse conv. Previous SNN works (Horowitz 2014; Rathi and Roy 2021) assume 32-bit floating-point implementation in $4 5 \mathrm { n m }$ technology, where $E _ { M A C } = 4 . 6 \mathrm { p J }$ and $E _ { A C } = 0 . 9 \mathrm { p J }$ for various operations.
+
+# Experiments
+
+In this section, we first give the hyper-parameters setting. Then we validate the E-3DSNN on diverse vision tasks, including
+
+<html><body><table><tr><td>Architecture</td><td>Method</td><td>Input</td><td>T×D</td><td>Param (M)</td><td>Power (mJ)</td><td>Accuracy (%)</td></tr><tr><td rowspan="6">ANN</td><td>PointNet (Qi et al. 2017)CVPR</td><td>Point</td><td>N/A</td><td>3.47</td><td>0.14</td><td>89.2</td></tr><tr><td>KPConv (Thomas et al. 2019)CVPR</td><td>Point</td><td>N/A</td><td>14.3</td><td></td><td>92.9</td></tr><tr><td>Pointformer (Zhao et al. 2021)ICCV</td><td>Point</td><td>N/A</td><td>4.91</td><td>0.11</td><td>93.7</td></tr><tr><td>3DShapeNets (Wu et al. 2015)CVPR</td><td>Voxel</td><td>N/A</td><td>6.92</td><td>0.15</td><td>77.3</td></tr><tr><td>3DVGG-B (Graham et al. 2017)</td><td>Voxel</td><td>N/A</td><td>5.23</td><td>0.12</td><td>88.2</td></tr><tr><td>E-3DSNN*</td><td>Voxel</td><td>N/A</td><td>3.27</td><td>0.17</td><td>90.9</td></tr><tr><td rowspan="5">SNN</td><td>SpikePointNet (Ren et al. 2024)NeurIPS</td><td>Point</td><td>4×1</td><td>3.47</td><td>0.03</td><td>88.2</td></tr><tr><td>SpikingPointNet (Lan et al. 2023)ICcV</td><td>Point</td><td>16×1</td><td>3.47</td><td>0.13</td><td>88.6</td></tr><tr><td>P2SResLNet (Wu et al. 2024b)AAAI</td><td>Point</td><td>4×1</td><td>14.3</td><td></td><td>88.7</td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>E-3DSNN (Ours)</td><td>Voxel</td><td>14</td><td>1.87</td><td>0.02</td><td>91.5</td></tr></table></body></html>
+
+Table 1: Shape classification results on the ModelNet40 dataset $\mathrm { W u }$ et al. 2015). Power is the estimation of energy consumption same as (Hu et al. 2024a; Shan et al. 2024). \* We convert $3 . 2 7 \mathbf { M }$ of E-3DSNN into ANN with the same architecture.
+
+3D classification, object detection, and semantic segmentation. Next, we ablate the different blocks of E-3DSNN to prove the effectiveness of our method. For further detailed information on architecture, more experiments on the NuScenes (Caesar et al. 2020) datasets, and visualizations, refer to the Appendix.
+
+# Hyper-parameters Setting
+
+In this section, we give the specific hyperparameters of our training settings in all experiments, as depicted in Tab. 2. In this work, we train our E-3DSNN with 4 A100 GPUs.
+
+Table 2: Hyper-parameter training settings of 3DSNN.   
+
+<html><body><table><tr><td>Parameter</td><td>ModelNet40</td><td>KITTI</td><td>SemanticKITTI</td></tr><tr><td>Learning Rate</td><td>1e-1</td><td>1e-2</td><td>2e-3</td></tr><tr><td>Weight Decay</td><td>le-4</td><td>le-2</td><td>5e-3</td></tr><tr><td>Batch Size</td><td>16</td><td>64</td><td>96</td></tr><tr><td>Training Epochs</td><td>200</td><td>80</td><td>100</td></tr><tr><td>Optimizer</td><td>SGD</td><td>Adam</td><td>AdamW</td></tr></table></body></html>
+
+# 3D Classification
+
+The ModelNet40 (Wu et al. 2015) dataset contains 12,311 CAD models with 40 object categories. They are split into 9,843 models for training and 2,468 for testing. For the input data, we clip the point clouds to ranges of $[ - 0 . 2 \mathrm { m } , 0 . 2 \mathrm { m } ]$ for the X-axis, $[ - 0 . 2 \mathrm { m } , 0 . 2 \mathrm { m } ]$ for the Y-axis, and $[ - 0 . 2 \mathrm { m } , 0 . 2 \mathrm { m } ]$ for the $Z \cdot$ -axis. The input voxel size is set to $0 . 0 1 \mathrm { m }$ . In terms of the evaluation metrics, we use the point cloud classification overall accuracy.
+
+As shown in Tab. 1, we compare our method with the previous state-of-the-art ANN and SNN domain. Notably, with only 3.27M parameters, the E-3DSNN achieves the best accuracy of $9 1 . 7 \%$ , regardless of voxel or point input in the SNN domain, showcasing significant advantages in both accuracy and efficiency. Specifically, E-3DSNN (This work) vs. SpikePointNet vs. SpikingPointNet: Power $0 . 0 1 \mathrm { m J }$ vs. $0 . 0 3 \mathrm { m J }$ vs. $0 . 1 3 \mathrm { m J }$ ; Param 1.87M vs. 3.47M vs. 3.47M;
+
+Accuracy $8 8 . 2 \%$ vs. $8 8 . 6 \%$ vs. $9 1 . 5 \%$ . That is, our model has $+ 2 . 8 \%$ higher accuracy than SpikingPointNet (Lan et al. 2023) with only the previous $1 1 . 4 \%$ energy consumption. Moreover, the performance gap between SNNs and ANNs is significantly narrowed. For instance, under lower parameters, the performance of Pointformer (Zhao et al. 2021) and E3DSNN are comparable, and the energy efficiency is $1 1 \times$ .
+
+# 3D Object Detection
+
+The large KITTI dataset (Geiger et al. 2012b) consists of 7481 training samples, which are divided into trainsets with 3717 samples and validation sets with 3769 samples. In detection, E-3DSNN are evaluated as backbones equipped with VoxelRCNN Head (Deng et al. 2021). We transform OpenPCDet (Team 2020) codebase into a spiking version and use it to execute our model. Raw point clouds are divided into regular voxels before being input to our 3DSNN on KITTI (Geiger et al. 2012a). For the input data, we clip the point clouds to the following ranges: $[ 0 , 7 0 . 4 ] \mathrm { m }$ for the X-axis, $[ - 4 0 , 4 0 ] \mathrm { m }$ for the Y-axis, and $[ - 3 , \mathrm { 1 } ] \mathrm { m }$ for the $Z$ -axis. The input voxel size is set to $( 0 . 0 5 \mathrm { m } , 0 . 0 5 \mathrm { m } , 0 . 1 \mathrm { m } )$ . In terms of the evaluation metrics, we use the Average Precision (AP) calculated by 11 recall positions for the Car class.
+
+As shown in Tab. 3, we compare our method in 3D object detection with the previous state-of-the-art (SOTA) ANN domain. Since no SNN has yet reported results on the KITTI dataset, we employ the I-LIF spiking neuron (Luo et al. 2024) to directly convert the PointRCNN (Shi et al. 2019) architecture into a spike-based version, referred to as SpikePointRCNN. We obtained $8 9 . 6 \%$ , $8 4 . 0 \%$ , $7 8 . 7 \%$ AP, which is higher than the prior state-of-the-art SNN by a large margin, i.e., $5 . 8 \%$ , $1 1 . 9 \%$ , $6 . 8 \%$ absolute improvements on easy, moderate, and hard levels of class Car. E-3DSNN also has significant advantages over existing SNNs and ANNs regarding parameters and power. For instance, E-3DSNN (This work) vs. SpikePointNetRCNN vs. VoxelRCNN: AP $8 9 . 6 \%$ vs. $8 3 . 8 \%$ vs. $8 9 . 4 \%$ ; Power $3 . 4 \mathrm { m J }$ vs. $4 . 4 \mathrm { m J }$ vs. $2 8 . 9 \mathrm { { m J } }$ . In summary, E-3DSNN achieved state-of-the-art performance in the SNN domain in terms of both accuracy and efficiency on the KITTI dataset, while also achieving results comparable to ANNs.
+
+Table 3: 3D object detection results on the KITTI val benchmarks (Geiger et al. 2012a). \* We convert $8 . 5 \mathrm { M }$ of E-3DSNN int ANN with the same architecture.   
+
+<html><body><table><tr><td rowspan="2">Architecture</td><td rowspan="2">Method</td><td rowspan="2">Input</td><td rowspan="2">T×D</td><td rowspan="2">Pamam</td><td rowspan="2">Power</td><td colspan="3">ESyr 3DAP (R11ard</td></tr><tr><td></td><td></td><td></td></tr><tr><td rowspan="6">ANN</td><td>PointRCNN (Shi et al. 2019)CVPR</td><td>Point</td><td>N/A</td><td>4.0</td><td>22.5</td><td>88.8</td><td>78.6</td><td>77.3</td></tr><tr><td>PVRCNN (Shi et al. 2020)CVPR</td><td>Point</td><td>N/A</td><td>13.1</td><td>34.9</td><td>89.3</td><td>83.6</td><td>78.7</td></tr><tr><td>Second (Yan et al. 2018)Sensor</td><td>Voxel</td><td>N/A</td><td>5.3</td><td>23.9</td><td>88.6</td><td>78.6</td><td>77.2</td></tr><tr><td>VoxelRCNN (Deng et al. 2021)AAAI</td><td>Voxel</td><td>N/A</td><td>7.5</td><td>28.9</td><td>89.4</td><td>84.5</td><td>78.9</td></tr><tr><td>GLENet (Zhang et al. 2023)UCV</td><td>Voxel</td><td>N/A</td><td>8.3</td><td></td><td>89.8</td><td>84.5</td><td>78.7</td></tr><tr><td>E-3DSNN*</td><td>Voxel</td><td>N/A</td><td>8.5</td><td>31.2</td><td>89.4</td><td>83.7</td><td>78.2</td></tr><tr><td rowspan="2">SNN</td><td>SpikePointRCNN*</td><td>Point</td><td>1×4</td><td>4.0</td><td>4.4</td><td>83.8</td><td>72.1</td><td>71.9</td></tr><tr><td>E-3DSNN (Ours)</td><td>Voxel</td><td>1×4</td><td>8.5</td><td>3.4</td><td>89.6</td><td>84.0</td><td>78.7</td></tr></table></body></html>
+
+<html><body><table><tr><td>Architecture</td><td>Method</td><td>Input</td><td>T×D</td><td>Param (M)</td><td>Power (mJ)</td><td>mIoU (%)</td></tr><tr><td rowspan="5">ANN</td><td>PointNet (Qi et al. 2017)CVPR</td><td>Point</td><td>N/A</td><td>3.5</td><td>-</td><td>14.6</td></tr><tr><td>Pointformer V3 (Wu et al. 2024b)CVPR</td><td>Point</td><td>N/A</td><td>46.2</td><td>47.1</td><td>72.3</td></tr><tr><td>SparseUNet (Graham et al. 2017)</td><td>Voxel</td><td>N/A</td><td>39.1</td><td>69.1</td><td>63.8</td></tr><tr><td>SphereFormer (Lai et al. 2023)CVPR</td><td>Voxel</td><td>N/A</td><td>32.3</td><td>49.2</td><td>67.8</td></tr><tr><td>E-3DSNN*</td><td>Voxel</td><td>N/A</td><td>20.1</td><td>54.1</td><td>69.4</td></tr><tr><td rowspan="4">SNN</td><td rowspan="2">SpikePointNet* SpikePointformer*</td><td>Point</td><td>1×4</td><td>3.5</td><td>1</td><td>12.1</td></tr><tr><td>Point</td><td>1×4</td><td>46.2</td><td>13.1</td><td>67.2</td></tr><tr><td rowspan="2">E-3DSNN (Ours)</td><td>Voxel</td><td>1×4</td><td>17.9</td><td>4.5</td><td>68.5</td></tr><tr><td>Voxel</td><td>1×4</td><td>20.1</td><td>6.1</td><td>69.2</td></tr></table></body></html>
+
+Table 4: 3D semantic segmentation results on Semantic KITTI val benchmarks (Behley et al. 2019). \* We convert 20.1M of E-3DSNN into ANN with the same architecture.
+
+# 3D Semantic Segmentation
+
+The large SemanticKITTI dataset (Behley et al. 2019) consists of sequences from the raw KITTI dataset, which contains 22 sequences in total. Each sequence includes around 1,000 lidar scans, corresponding to approximately 20,000 individual frames. We first transform Pointcept (Contributors 2023) codebase into a spiking version and use it to execute our model. Then we design an asymmetric encoder-decoder structure similar to UNet (Choy et al. 2019; Wu et al. 2023), with our E-3DSNN as encoder responsible for extracting multi-scale features and the decoder sequentially fusing the extracted multi-scale features with the help of skip connections. For voxelize implementation, the window size is set to $[ 1 2 0 \mathrm { m } , 2 ^ { \circ } , 2 ^ { \circ } ]$ for $( \bar { r } , \theta , \phi )$ . During data preprocessing, we restrict the input scene to the range $[ - 5 1 . 2 \mathrm { m } , - 5 1 . 2 \mathrm { m } , - 4 \mathrm { m } ]$ to $[ 5 1 . 2 \mathrm { m } , 5 1 . 2 \mathrm { m } , 2 . 4 \mathrm { m } ]$ . The voxel size is set to $0 . 1 \mathrm { m }$ .
+
+As shown in Tab. 4, we compare our method in 3D Semantic Segmentation with the previous state-of-the-art ANN domain. Since no SNN has yet reported results on the SemanticKITTI dataset, we employ the I-LIF spiking neuron (Luo et al. 2024) to convert the PointNet and Pointformer architectures into spike-based versions directly. We found that our E
+
+3DSNN achieves the best mIoU of $6 9 . 2 \%$ , which is $2 . 0 \%$ and $1 . 6 \%$ higher than the previous SOTA SNN. Our E3DSNN also demonstrates significant advantages over existing SNNs and ANNs in terms of parameter efficiency and power consumption for 3D semantic segmentation. For instance, E3DSNN (This work) vs. SpikePoinformer vs. SphereFormer: mIoU $6 9 . 2 \%$ vs. $6 7 . 2 \%$ vs. $6 7 . 8 \%$ ; Power $8 . 2 \mathrm { m J }$ vs. $1 9 . 0 \mathrm { m J }$ vs. $4 9 . 2 \mathrm { m J }$ ; Param: 20.1M vs. 46.2M vs. 32.3M.
+
+# Ablation Study
+
+We first compared the results of ANN and SNN with the same architecture on the Semantic KITTI validation benchmarks. As shown in Tab. 5, while E-3DSNN’s mIoU accuracy is $0 . 2 \%$ lower than the corresponding ANN, it shows an $8 . 8 \times$ improvement in energy efficiency. This indicates that SNNs have significant potential in efficiently processing sparse 3D point clouds.
+
+Next, we ablate two components of our E-3DSNN, namely the SVC and SSC, to verify the effectiveness of the proposed method. As shown in Tab. 5, using SVC alone yields a slight decrease in mIoU by $0 . 3 \%$ but achieves a $1 . 8 \times$ improvement in energy efficiency. When both SVC and SSC are employed, there is a $0 . 2 \%$ reduction in mIoU, but energy efficiency improves by $8 . 8 \times$ . Therefore, the proposed SSC and SVC can significantly reduce power consumption and improve efficiency while maintaining high performance. Their combined use yields even more substantial improvements, highlighting their effectiveness in enhancing energy efficiency in 3D recognition tasks.
+
+![](images/acf0798187f6ba5605b0fdb3604eb81d9b97052784e1100bd36530346b9f249b.jpg)  
+Figure 4: Visualization of E-3DSNN in hidden layer features and results. (a) We compared the hidden layer features generated with (top) and without SVC and SSC (bottom). (b) We compared the results of our E-3DSNN (top) in detection and segmentation with the ground truth (bottom).
+
+Then we evaluate the effects of varying $T$ and $D$ . We found that increasing the number of timesteps can enhance performance but affect inference time and increase power consumption. For instance, for the set with $D = 1$ , extending $T$ from 2 to 4 increases the mIoU by $1 . 4 \%$ but doubles the power consumption. Additionally, we found that expanding $D$ while keeping $T$ fixed improves performance and reduces power consumption. For instance, $2 \times 1$ vs. $2 \times 2$ : mIoU, $6 7 . 1 \%$ vs. $6 8 . 9 \%$ ; Power, $8 . 4 \mathrm { m J }$ vs. $8 . 1 \mathrm { m J }$ . $1 \times 2$ vs. $1 \times 4$ : mIoU, $6 7 . 9 \%$ vs. $6 9 . 2 \%$ ; Power, $6 . 3 \mathrm { m J }$ vs. $6 . 1 \mathrm { m J }$ .
+
+Table 5: Ablation study of the E-3DSNN on Semantic KITTI val benchmarks (Behley et al. 2019). \* We convert $2 0 . 1 \mathrm { M }$ of E-3DSNN into ANN with the same architecture.   
+
+<html><body><table><tr><td>Method</td><td>SvC</td><td>sSC</td><td>T×D</td><td>Power (mJ)</td><td>mIoU (%)</td></tr><tr><td>ANN*</td><td>-</td><td>-</td><td>N/A</td><td>54.1</td><td>69.4</td></tr><tr><td rowspan="6">E-3DSNN</td><td>√</td><td>1</td><td>1×4</td><td>29.1</td><td>69.3</td></tr><tr><td>√</td><td>√</td><td>1×4</td><td>6.1</td><td>69.2</td></tr><tr><td>√</td><td>√</td><td>1×2</td><td>6.3</td><td>67.9</td></tr><tr><td>√</td><td>√</td><td>2×1</td><td>8.4</td><td>67.1</td></tr><tr><td>√</td><td>√</td><td>2×2</td><td>8.1</td><td>68.9</td></tr><tr><td>√</td><td>√</td><td>4×1</td><td>16.1</td><td>68.5</td></tr></table></body></html>
+
+# Visualization
+
+We evaluated the effectiveness of E-3DSNN in reducing irrelevant redundant points in the background. By training E-3DSNN with and without SVC and SSC on Semantic KITTI (Behley et al. 2019) and KITTI (Geiger et al. 2012a) datasets, we generated the hidden layer feature maps and final detection and segmentation results shown in Fig. 4. It can be observed that our SSC and SVC help 3D SNNs significantly reduce irrelevant redundant points in the background in 3D detection and segmentation tasks. For instance, in the intermediate feature maps Fig. 4 (a) and (b), we notice that most foreground points are preserved, while road points, being easily identifiable as redundant, are largely removed. In the result Fig. 4 (c) and (d), we observe that our E-3DSNN achieves visual effects in detection and segmentation that are comparable to those of ANNs with the same architecture. For instance, in detection, our E-3DSNN has detected all car categories with high confidence. In segmentation, for finegrained categories such as fence and sidewalk, our E-3DSNN demonstrates excellent segmentation performance.
+
+# Conclusion
+
+This paper significantly narrows the performance gap between ANN and SNN on 3D recognition tasks. We accomplish this through two key issues with SNN in processing 3D point cloud data. First, to tackle the disordered and uneven nature of point cloud data, we propose the Spike Voxel Coding (SVC) scheme, which significantly improves storage and preprocessing efficiency. Second, to overcome the rapid increase in computational complexity when applying SNNs to 3D point clouds, we introduce Spike Sparse Convolution (SSC), which reduces redundant computations on background points. The E-3DSNN backbone utilizes these innovations along with residual connections between membrane potentials to handle various 3D computer vision tasks efficiently. Experiments conducted on ModelNet, KITTI, and Semantic KITTI datasets demonstrate that E-3DSNN achieves state-of-the-art performance in terms of accuracy and efficiency across different tasks including 3D classification, object detection, and semantic segmentation. We hope our investigations pave the way for efficient 3D recognition and inspire the design of sparse event-driven SNNs.

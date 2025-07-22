@@ -1,0 +1,246 @@
+# From PEFT to DEFT: Parameter Efficient Finetuning for Reducing Activation Density in Transformers
+
+Bharat Runwal1, Tejaswini Pedapati2, Pin-Yu Chen2
+
+1Independent Researcher 2IBM Research bharatrunwal@gmail.com, tejaswinip@us.ibm.com, pin-yu.chen@ibm.com
+
+# Abstract
+
+Pretrained Language Models (PLMs) have become the de facto starting point for fine-tuning on downstream tasks. However, as model sizes continue to increase, traditional fine-tuning of all parameters becomes challenging. To address this, parameter-efficient fine-tuning (PEFT) methods have gained popularity as a means to adapt PLMs effectively. In parallel, recent studies have revealed the presence of activation sparsity within the intermediate outputs of the multilayer perceptron (MLP) blocks in transformers. Low activation density enables efficient model inference on sparsityaware hardware. Building upon this insight, in this work, we propose a novel density loss that encourages higher activation sparsity (equivalently, lower activation density) in the pretrained models. We demonstrate the effectiveness of our approach by utilizing mainstream PEFT techniques, including QLoRA, LoRA, Adapter, and Prompt/Prefix Tuning, to facilitate efficient model adaptation across diverse downstream tasks. Experiments show that our proposed method, DEFT (Density-Efficient Fine-Tuning), can consistently reduce activation density by up to $4 4 . 9 4 \%$ on RoBERTaLarge and by $5 3 . 1 9 \%$ (encoder density) and $9 0 . 6 0 \%$ (decoder density) on Flan- $. \mathrm { T } 5 _ { \mathrm { X X L } }$ (11B) compared to PEFT, using GLUE and QA (SQuAD) benchmarks respectively, while maintaining competitive performance on downstream tasks. We also introduce ADA-DEFT, an adaptive variant of our DEFT approach, which achieves significant memory and runtime savings during inference for large models. For instance, ADA-DEFT reduces runtime by $8 . 7 5 \%$ and memory usage by $1 6 . 7 8 \%$ in Flan- $\mathrm { \Delta } \cdot \mathrm { T } 5 _ { \mathrm { X L } }$ , and by $2 . 7 9 \%$ and $2 . 5 4 \%$ respectively in Flan${ \mathrm { T } } 5 _ { \mathrm { X X L } }$ . Additionally, we showcase that DEFT works complementarily with quantized and pruned models.
+
+# Code — https://github.com/IBM/DEFT
+
+# Introduction
+
+With the advent of pre-trained large language models (LLMs) (Devlin et al. 2019; Radford et al. 2019; Raffel et al. 2020), fine-tuning (Howard and Ruder 2018) these models to adapt to a task has become prevalent. However, training these models and performing inference on them requires a significant amount of time, energy, and memory, thereby resulting in an enormous carbon footprint (Strubell, Ganesh, and McCallum 2019). Some methods to achieve faster and greener inference are by pruning the model parameters (Lee, Ajanthan, and Torr 2019; Tanaka et al. 2020), pruning the number of heads by analyzing the attention patterns (Behnke and Heafield 2020; Voita et al. 2019; Michel, Levy, and Neubig 2019), distilling the larger model to a smaller model (Sanh et al. 2019), quantizing the models to convert the weights to a lower precision (Dettmers et al. 2022; Zadeh et al. 2020), using mixture of experts (MOE) (Kudugunta et al. 2021; Rajbhandari et al. 2022), etc. In contrast, this paper focuses on accelerating the model inference by increasing the activation sparsity in the model. This is achieved by including a penalty for high activation density in the loss function.
+
+Recent studies (Zhang et al. 2021; Li et al. 2022) have shown that in a transformer architecture, specifically in the intermediate outputs of MLP (Multi-Layer Perceptron) blocks with ReLU activations, only a fraction of neurons are activated for a given input, leading to the sparse activation maps as the output. Building upon this observation, we propose a novel density loss that encourages higher activation sparsity in pre-trained models when adapting to downstream tasks, effectively reducing the activation density.
+
+Moreover, the induction of higher activation sparsity holds promising prospects for substantial energy savings, especially on modern hardware acceleration architectures like ASICs (Application Specific Integrated Circuits) (Lazzaro et al. 2023), which leverage zero-skip operations. By promoting sparsity in the activation maps of transformers, hardware can take advantage of zero-skip operations, skipping unnecessary computations on zero-valued activations, resulting in reduced power consumption and more efficient model inference. This energy-efficient approach becomes particularly advantageous for resource-constrained environments or applications with strict energy constraints.
+
+In this work, we present Density-Efficient Fine-Tuning (DEFT) and its variant ADA-DEFT (Adaptive-DEFT), which induces activation sparsity using parameter-efficient fine-tuning (PEFT) techniques. We illustrate DEFT in Figure (1a). The bar plot shows the reduction in Activation Density $( \% )$ , which is defined as the number of non-zero values in the intermediate output of MLP layers in transformer blocks averaged over the full validation set. Our proposed DEFT significantly lowers the activation density compared to PEFT. Figure (1b) illustrates our Adaptive DEFT (ADADEFT) method, where we skip the MLP block during inference based on the learned adaptive layerwise weights, resulting in runtime savings as shown in the bar plot for Flan-T5 models.
+
+![](images/a447f1936d236079f2db73e7b38c7c02bf5a67f31aad2121bde6b139ca884e03.jpg)  
+Figure 1: (a) Comparison between the activation density (in the intermediate output of MLP) after adapting to downstream tasks with PEFT and our proposed DEFT method. Both methods use Adapter. (b) ADA-DEFT during inference: based on the learned adaptive layerwise weights, we skip MLP blocks in the ADA-DEFT model, resulting in runtime savings for Flan-T5 models.
+
+To the best of our knowledge, we are the first to demonstrate that a significant degree of activation sparsity can be attained using a small number of trainable parameters. This is particularly notable in Gaussian Error Linear Unit (GeLU) (Hendrycks and Gimpel 2016) models (GeLU and it’s variant are the default activation function of state-ofthe-art transformer models). Prior studies primarily concentrated on ReLU-based models for investigating activation sparsity (Lazzaro et al. 2023), which are known for their inherent sparsity in activation maps. Our approach, combining PEFT and activation sparsity, paves the way for resourcefriendly transformer models across various applications.
+
+# Related Work
+
+# Weight Induced Sparsity
+
+Reducing the number of model parameters results in a model with a lesser memory footprint, reducing the amount of computational resources required to perform the inference. This can be done by pruning those model parameters whose removal does not deteriorate the model’s performance significantly. To prune the weights at initialization using unstructured pruning, methods such as snip (Lee, Ajanthan, and Torr 2019), grasp (Wang, Zhang, and Grosse 2020), synaptic flow (Tanaka et al. 2020), etc can be leveraged.
+
+Prior arts such as (Li, Cotterell, and Sachan 2021; Voita et al. 2019; Michel, Levy, and Neubig 2019; Behnke and Heafield 2020) sort the heads based on various importance scores and prune the bottom rung. For instance, in (Michel, Levy, and Neubig 2019), the importance score is the difference in loss values of when the head is not pruned and when it is pruned. Both (Voita et al. 2019) and (Behnke and Heafield 2020) use the confidence of heads as the pruning metric. Distilling the original model into a smaller model with fewer parameters also achieves the same goal. DistilBert (Sanh et al. 2019) was obtained by using knowledge distillation on the BERT model during the pre-training phase and is $40 \%$ smaller than BERT while being $9 7 \%$ as performant as BERT.
+
+(Chen et al. 2021) used a parameter efficient fine-tuning technique that performs low rank weight updates similar to LoRA. The user inputs the desired sparsity and whether entire heads must be pruned or any model parameters can be pruned. After training, the model parameters and the heads are sorted by the gradient magnitude and are pruned according to the user’s preference to achieve the desired sparsity. In (Sun et al. 2023a), the importance score for pruning model parameters is calculated as the product of the weight magnitudes and the norms of the input activations.
+
+# Activation Induced Sparsity
+
+Rather than eliminating the parameters apriori, inducing activation sparsity dynamically reduces the latency on a sparsity-aware hardware by reducing the number of computations. (Li et al. 2022) showed that the larger the language models, the sparser their layer outputs are. Although the output was sparse, there was never a neuron that was never activated. While $9 3 . 5 \%$ of the neurons were activated less than $10 \%$ of the time, the least activated neuron was fired at least $0 . 0 0 1 \%$ of the time. Activation sparsity is achieved by thresholding the top- $\mathbf { \nabla } \cdot \mathbf { k }$ activation outputs and zeroing out the
+
+rest.
+
+(Kurtz et al. 2020) modified ReLU activation of ResNet18 models to fire only if the magnitude of the input is higher than the specified threshold. A special sparsity-aware convolution algorithm is used to accelerate inference. As opposed to this, our method naturally induces the activation sparsity during the training owing to our loss function.
+
+# Methodology
+
+# Background and Notations
+
+In transformers, the position-wise feed-forward networks employ a two-layer MLP. We measure the activation sparsity at the intermediate output of this two-layer MLP, following the works of (Li et al. 2022) and (Zhang et al. 2021).
+
+Consider an input $X \in \mathbb { R } ^ { B \times K \times d _ { \mathrm { m o d e l } } }$ , where $B$ is the batch size, $K$ is the sequence length and $d _ { \mathrm { m o d e l } }$ denotes the dimensionality of the input features. Given an input matrix $X$ , the output of the two-layer MLP can be described as:
+
+$$
+Y ( X ; W _ { 1 } , W _ { 2 } ) = f \left( X W _ { 1 } \right) W _ { 2 }
+$$
+
+Here $W _ { 1 } \in \mathbb { R } ^ { d _ { \mathrm { m o d e l } } \times d _ { \mathrm { f f } } }$ and $W _ { 2 } \in \mathbb { R } ^ { d _ { \mathrm { f f } } \times d _ { \mathrm { m o d e l } } }$ are the learnable parameters of the MLP layers. $d _ { \mathrm { f f } }$ represents the hidden dimension of the MLP block, and $f$ is the non-linear activation function.
+
+Gated-MLP Blocks: Most large language models (LLMs) currently use the Gated MLP blocks (Shazeer 2020). The Gating Mechanism consists of the following computations :
+
+$$
+\boldsymbol { Y } = \left( f ( \boldsymbol { X } \boldsymbol { W } _ { s } ^ { T } ) \odot ( \boldsymbol { X } \boldsymbol { W } _ { e } ^ { T } ) \right) \boldsymbol { W } _ { o } ^ { T }
+$$
+
+Here $W _ { s } , W _ { e } \in \mathbb { R } ^ { d _ { \mathrm { f f } } \times d _ { \mathrm { m o d e l } } }$ and $W _ { o } \in \mathbb { R } ^ { d _ { \mathrm { m o d e l } } \times d _ { \mathrm { f f } } }$
+
+To measure the sparsity of neuron activations, we first define the activation pattern as :
+
+$$
+O = f \left( X W _ { 1 } \right) \mathrm { o r } O = f \left( X W _ { s } ^ { T } \right)
+$$
+
+The matrix $O \in \mathbb { R } ^ { B \times K \times d _ { \mathrm { f f } } }$ is the activation pattern. Following (Li et al. 2022), we can define the vector $s \in \mathbb { R } ^ { d _ { \mathrm { f f } } }$ as the average across the batches and sequence length of matrix $O$ to represents the final feature map. So, we can measure the sparsity of neurons by counting the number of non-zeros in the feature map $s$ .
+
+# Density Loss
+
+In this section, we introduce our proposed Density loss in DEFT. Our goal is to reduce the activation density (or increase activation sparsity) in MLP blocks for given inputs.
+
+Previous work by (Li et al. 2022) used a step function to count the number of positive elements precisely, but this operation is non-differentiable and cannot be used for our purpose of reducing activation density in an end-to-end learning setup. Therefore, to approximate the number of non-zero entries in the sparse vector $s$ , we use the hyperbolic tangent function with a scaling parameter $\beta$ for ReLU-activation based models as defined in (4) for an input feature $x$ with $n$ elements $\{ x _ { i } \} _ { i = 1 } ^ { n }$ . (Krithivasan, Sen, and Raghunathan 2020) used a similar function for their purpose of generating adversarial inputs for sparsity attacks. We also use a differentiable approximation of the $l _ { 0 }$ norm (Lazzaro et al. 2023) for GeLU and other models with activations different from GeLU and ReLU, as defined (5) with some hyperparameter $\epsilon > 0$ .
+
+$$
+\begin{array} { c } { \displaystyle \operatorname { t a n h } ( x , \beta ) = \frac { e ^ { \beta \cdot x } - e ^ { - \beta \cdot x } } { e ^ { \beta \cdot x } + e ^ { - \beta \cdot x } } } \\ { \displaystyle \hat { l } _ { 0 } ( x , \epsilon ) = \sum _ { i = 1 } ^ { n } \left( \frac { x _ { i } ^ { 2 } } { x _ { i } ^ { 2 } + \epsilon } \right) } \end{array}
+$$
+
+By adjusting the value of $\beta$ in (4), we can control the abruptness to approximate the step function (and therefore sparsity) of the values. Higher values of $\beta$ make the function more closely resemble the step function. In (5), $\epsilon \in \mathbb { R }$ is a parameter dictating the quality of the approximation—lower values of $\epsilon$ correspond to better approximations. In Appendix A.3, we also explored different approximation functions like sigmoid, $l _ { 1 }$ norm and others.
+
+We define the density loss $\mathcal { L } _ { \mathrm { d e n s i t y } } ( x )$ as follows:
+
+$$
+\mathcal { L } _ { \mathrm { d e n s i t y } } ( x ) = \frac { 1 } { n } \sum _ { l = 1 } ^ { L } \sum _ { i } g ( s _ { l _ { i } } )
+$$
+
+Here, $n$ is the total number of neurons in all the MLP layers, $L$ is the total number of layers in the transformer, and $s _ { l }$ is the feature map after the first dense layer in MLP layer $l$ , with $i$ indexing each feature of $s _ { l }$ . The summation is across all the layers and the elements of the vector $s _ { l }$ . The approximation function $g$ can either be the $l _ { 0 }$ approximation (5) or any function in Appendix A.3.
+
+# Parameter Efficient Fine-tuning (PEFT)
+
+Fine-tuning a LLM is computationally expensive, as it involves training all the model parameters from scratch. When adapting a model to multiple datasets, the traditional finetuning approach necessitates saving all the trained parameters separately for each dataset, leading to significant storage overhead and computational burden. PEFT addresses this by introducing fewer additional trainable parameters. During fine-tuning, only these parameters are trained, with the rest of the model remaining unchanged. This approach not only reduces computational burden but also minimizes storage demands, as only the new parameters need saving, streamlining the model adaptation process.
+
+Our proposed DEFT is fully compatible with PEFT, and in this paper it adopts Prompt tuning (Lester, Al-Rfou, and Constant 2021), Prefix tuning (Li and Liang 2021), adapters (Houlsby et al. 2019) and Low-rank adaptation (LoRA) (Hu et al. 2022; Dettmers et al. 2023) techniques for demonstration. Each of these techniques is detailed in Appendix A.1.
+
+# DEFT: Parameter and Activation Density Efficient Fine-tuning
+
+In our DEFT framework, to efficiently adapt the model without fine-tuning all parameters, we freeze the transformer parameters and only train the aforementioned PEFT modules for downstream tasks.
+
+For PEFT, we solve the following optimization problem:
+
+$$
+\arg \operatorname* { m i n } _ { \Phi } \mathcal { L } _ { \mathrm { T } } \left( \mathrm { D } ; \{ \Theta , \Phi \} \right)
+$$
+
+<html><body><table><tr><td>1:for epoch←1to Edo 2: 3: 4: fori←1 toL do 5: 6: n.append(g(Oi)) 7: n.append(g(si : Oi)) 8: end for</td><td>Require:Dataset D,# of Epochs E,Batch Size B,#of TransformerBlocks L,Tunable Parameters Φ,Coeffi- cient α, Sparsity Approximation Function g,Adaptive Sparsity Weights for ADA-DEFT {S}=1 forbatch ← 1 to length(D) with batch size B do auxiliary variable η ←[] Oi← Get the output for MLPi</td></tr></table></body></html>
+
+Here, $\Phi$ represents a set of additional parameters (tunable) in PEFT, while $\Theta$ denotes the set of pre-trained parameters (frozen). The loss function $\mathcal { L } _ { \mathrm { T } }$ encapsulates the task-specific objectives and $D$ is the dataset associated with the task.
+
+For our proposed density-efficient fine-tuning (DEFT), i.e. inducing activation sparsity in the MLP layer of transformer blocks, we augment the optimization problem (7) by incorporating our density loss (6):
+
+$$
+\begin{array} { r l } & { \underset { \Phi } { \arg \operatorname* { m i n } } \mathcal { L } _ { \mathrm { t o t a l } } = \mathcal { L } _ { \mathrm { T } } \left( \mathrm { D } ; \{ \Theta , \Phi \} \right) } \\ & { \qquad + \alpha \cdot \mathcal { L } _ { \mathrm { d e n s i t y } } \left( \mathrm { D } ; \{ \Theta , \Phi \} \right) } \end{array}
+$$
+
+Here, the parameter $\alpha$ controls the balance between optimizing the performance metric and inducing activation sparsity. Notably, higher values of $\alpha$ promote sparser activation maps, although a careful equilibrium is required to ensure minimal impact on performance. We have described the algorithm for DEFT in Algorithm 1.
+
+Importantly, the tunable parameters $\Phi$ encompass a versatile range of modules, or compositions thereof, from the choice of Adapters, LoRA, QLoRA, Prefix-Tuning, Prompt-Tuning , while the original pre-trained parameters $\Theta$ remains frozen. We advocate for these parameter-efficient modules over full-finetuning due to our experimental findings, which reveal that the introduction of a small fraction of trainable parameters (just a few $\%$ of the full model size) suffices to trigger activation sparsity within the MLP blocks. By incorporating these modules, we achieve a twofold efficiency advantage: (1) Facilitating activation sparsity, primed for utilization by hardware accelerators such as ASIC; and (2) Efficient training and storage of these modules, yielding gains in both training time and memory utilization, all while preserving the integrity of downstream task performance.
+
+# ADA-DEFT : Adaptive Parameter and Activation Density-Efficient Fine-Tuning
+
+In previous section, we introduced an additional density loss to induce activation sparsity in pretrained models, with the weight of the loss being a constant $\alpha$ , which determines the sparsity in the activations. From prior work in weight pruning (Frankle and Carbin 2018; Mocanu et al. 2017), it has been observed that performance improves when the sparsity ratio allocation is non-uniform, i.e., each layer is treated differently for the downstream task. Inspired by the non-uniform layerwise weight sparsity, we investigated this non-uniform treatment of activation sparsity for each layer by introducing an extra trainable parameter for each MLP block in the model, formally:
+
+$$
+\begin{array} { r l } & { \arg \underset { \Phi , \mathrm { S } } { \mathrm { m i n } } \mathcal { L } _ { \mathrm { t o t a l } } = \mathcal { L } _ { \mathrm { T } } \left( \mathrm { D } ; \{ \Theta , \Phi , \mathrm { S } \} \right) } \\ & { \qquad + \alpha \cdot \mathcal { L } _ { \mathrm { d e n s i t y } } \left( \mathrm { D } ; \{ \Theta , \Phi , \mathrm { S } \} \right) } \end{array}
+$$
+
+Here, $\textit { S } = \ [ S _ { 1 } , S _ { 2 } , \ldots , S _ { L } ]$ with $S _ { k } ~ \in ~ [ 0 , 1 ]$ for every $k \in [ 1 , L ]$ are the trainable parameters for each MLP Block (adaptive layerwise weights).
+
+In our experiments, we demonstrate that the adaptive layerwise weights help skip some unimportant layers, resulting in memory and runtime savings with minimal impact on downstream performance.
+
+# Experiments
+
+Datasets: We evaluated the performance of our method and PEFT techniques using two benchmark datasets: GLUE (Wang et al. 2018) and SQuAD (Rajpurkar et al. 2016). GLUE includes various natural language processing tasks. We focused on eight specific datasets: sentiment classification (SST-2), paraphrase detection (MRPC, QQP), natural language inference (MNLI, RTE, QNLI), linguistic acceptability (CoLA), and Semantic Textual Similarity (STSB). SQuAD is a well-known reading comprehension benchmark. It comprises of question-answering pairs, requiring the model to provide answers based on given passages. More details about the datasets are in Appendix A.2.
+
+Pretrained Language Models: In the main paper, we used pre-trained RoBERTaLarge (355M parameters, 24 layers) (Liu et al. 2019); T5SMALL (60M parameters; 6 encoder and decoder layers), T5BASE (220M parameters; 12 encoder and decoder layers) (Raffel et al. 2019) models; Flan-T5-base (250M parameters, 12 encoder and decoder layers), Flan-T5-xl (3B parameters; 24 encoder and decoder layers), Flan-T5-xxl (11B parameters; 24 encoder and decoder layers) (Chung et al. 2022) instruction-tuned models. We also provide additional results with other models, including BERT, OPT, GPT2, and ViT in Appendix A.7.
+
+PEFT Modules: We used Adapter, LoRA, Prefix-Tuning (Prefix-T), Prompt Tuning (Prompt-T)} for $\{ \mathrm { R o B E R T a } \}$ and Adapter, LoRA, QLoRA for T5 models. These PEFT modules serve as the baselines to be compared with our proposed DEFT method. More detailed information about the hyperparameters employed in our experiments can be found in Appendix A.2.
+
+Evaluation Metrics: Performance Regarding the GLUE benchmark, we utilize task-specific evaluation metrics. For the Semantic Textual Similarity (STS-B) dataset, we report the Pearson correlation coefficient. For the CoLA dataset, we use the Matthews correlation coefficient. For MNLI, we report accuracy on the matched validation set, while for all other GLUE tasks, we report accuracy. For the SQuAD dataset, we use the F1 score and Exact-Match score to evaluate performance.
+
+Evaluation Metrics: Efficiency Beyond task-specific metrics, we evaluate the effectiveness of our method in promoting activation sparsity. We calculate the Density $( \% )$ of activations by identifying the number of non-zero values in the intermediate activation matrices within the MLP block of each transformer layer and averaging these across all layers and the validation set.
+
+We also introduce the Density Change $( \% )$ metric, inspired by the energy consumption ratio concept from (Shumailov et al. 2021). This metric compares the sparsity induced by our method to the baseline and is computed as follows:
+
+$$
+( \% ) = \left( \frac { \mathrm { D e n s i t y } _ { \mathrm { P E F T } } - \mathrm { D e n s i t y } _ { \mathrm { D E F T } } } { \mathrm { D e n s i t y } _ { \mathrm { P E F T } } } \right) \times 1 0 0 \
+$$
+
+Here, DensityPEFT and DensityDEFT, represent the density percentages for baseline PEFT and our DEFT methods, respectively. This formula effectively highlights the reduction in activation density achieved through our approach.
+
+Energy Consumption Ratio Activation sparsity can be directly leveraged on hardware with zero-skip operations, such as ASIC accelerators. Thus, our DEFT method, which promotes sparser activations, is expected to yield higher energy savings on such hardware. We utilize the energy consumption ratio from (Lazzaro et al. 2023), defined as the ratio between the energy consumed with zero-skipping operations and the energy consumed with standard operations (without zero-skipping). We also report Energy Change $( \% )$ , calculated as the relative change between the energy ratios of PEFT and DEFT, normalized by the PEFT energy ratio.
+
+Runtime and Memory Analysis We report runtime in seconds and memory (in GB) usage for both ADA-DEFT and the baseline ADA-PEFT during evaluation, showcasing practical speedups in inference and reductions in memory storage with ADA-DEFT. This approach provides a direct comparison of real-world performance efficiencies.
+
+Density Loss Hyperparameters: For our density loss we used $\beta \ = \ 2 0$ with tanh approximation Eq. (4) and $\epsilon \ =$ $1 e \mathrm { ~ - ~ } 0 7$ with $l _ { 0 }$ -approximation Eq. (5) and $\alpha = 1 . 0$ . We also provide an ablation study for varying these parameters later in Appendix A.5. We initialize the adaptive layerwise weights in Eq. 9 for both the encoder and decoder to 0.80 and then perturbed by adding random noise drawn from a normal distribution with a standard deviation of 0.05.
+
+# Results on GLUE Benchmark
+
+The performance comparison of different methods on GLUE using the RoBERTaLarge model is presented in Table ??. This table provides insights into the effects of induced activation sparsity on both performance metrics and activation density in the intermediate layers of the Transformer MLP block with only a few trainable parameters.
+
+Across all datasets, the fine-tuning methods, Adapter, LoRA, Prefix-Tuning (Prefix-T), and Prompt-Tuning (Prompt-T), were evaluated using two approaches: PEFT and DEFT. We observe that all DEFT methods (Adapter, LoRA, Prefix-T, and Prompt-T) generally achieve comparable or better performance to PEFT, with only marginal differences in most cases, while significantly reducing activation density. The best performance on the GLUE benchmark is observed with DEFT using the Adapter module $( 8 8 . 0 6 \% )$ . The results consistently show that all DEFT methods achieve significantly lower activation density than PEFT.
+
+Reduction in Activation Density: Adapter $> \mathbf { L o R A } >$ Prefix- $\mathbf { T } >$ Prompt-T. In all cases, our proposed DEFT method promotes activation sparsity with minimal or no effect on downstream performance. The reductions in activation density range from $0 . 0 2 \%$ (Prompt-T, MRPC) to $5 5 . 5 7 \%$ (Adapter, SST-2) across the different datasets and methods. Notably, the method achieving the highest reduction in activation density on the GLUE benchmark is Adapter $( 4 4 . 9 4 \% )$ , followed by LoRA $( 3 8 . 8 2 \% )$ and PrefixT $( 3 6 . 3 9 \% )$ ). Prompt-T shows the least reduction, at $1 . 4 4 \%$ , and we specifically note a training collapse in the CoLA dataset using Prompt-Tuning.
+
+It is important to note that these results are not directly comparable across different modules due to variations in the number of trainable parameters and the locations of additional parameters. For instance, prefix-tuning involves adding trainable parameters to the hidden states. Nonetheless, the generality of DEFT is evident, as all methods effectively promote activation sparsity with minimal impact on downstream performance.
+
+Layerwise Activation Sparsity Analysis. To delve deeper into the effects of our method, we analyze layerwise activation sparsity in RoBERTaLarge when paired with Adapter. This analysis is visually represented in Fig. 2 for the SST-2 (a) and MNLI (d) datasets. Given that RoBERTaLarge comprises 24 layers, we computed the percentage of non-zero activations across these layers using the validation datasets. The resulting plots reveal a pronounced decrease in non-zero activations at each layer, underscoring DEFT’s efficiency in inducing activation sparsity throughout the network’s depth.
+
+Energy Consumption Ratio for $\mathbf { R o B E R T a } _ { \mathrm { L a r g e } }$ . In Table 2, we report the energy consumption ratio and energy change $( \% )$ . We used SST2 dataset from GLUE benchmark and reported our results on RoBERTaLarge with Adapter module, the remaining modules are reported in Appendix A.6. From the results, we can see that DEFT leads to a reduction in Energy Consumption $( 8 . 2 3 \% )$ compared to PEFT
+
+Table 1: Performance comparison on GLUE benchmarks with RoBERTalarge. $( ^ { * } )$ denotes unstable training. $\mathrm { D C } ( \% )$ represents Density Change $( \% )$ . We present the mean values here; please refer to the appendix for the standard deviation.   
+
+<html><body><table><tr><td>Module(%Trainable)</td><td>Method</td><td>Performance</td><td>MNLI</td><td>QQP</td><td>QNLI</td><td>SST-2</td><td>STS-B</td><td>MRPC</td><td>RTE</td><td>CoLA</td><td>Avg.</td></tr><tr><td rowspan="4">Adapter (1.17%)</td><td rowspan="2">PEFT</td><td>Metric (↑)</td><td>89.83</td><td>91.79</td><td>94.49</td><td>96.06</td><td>92.31</td><td>89.29</td><td>84.11</td><td>65.43</td><td>87.91</td></tr><tr><td>Menity(J)</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td rowspan="2">DEFT</td><td></td><td>94.24</td><td>94.06</td><td>94.23</td><td>93.13</td><td>94.46</td><td>94.32</td><td>94.54</td><td>94.19</td><td>88.06</td></tr><tr><td>Density (↓)</td><td>44.29</td><td>42.38</td><td>46.60</td><td>41.50</td><td>59.85</td><td>63.47</td><td>75.15</td><td>42.01</td><td></td></tr><tr><td rowspan="4">LoRA (1.16%)</td><td rowspan="2">PEFT</td><td>DC (%) (1)</td><td>53.00</td><td>54.94</td><td>50.55</td><td>55.77</td><td>36.61</td><td>32.71</td><td>20.51</td><td>55.40</td><td>44.94</td></tr><tr><td>Metric (↑)</td><td>90.53</td><td>91.38</td><td>94.71</td><td>95.67</td><td>91.21</td><td>91.63</td><td>81.94</td><td>63.21</td><td>87.54</td></tr><tr><td rowspan="2"></td><td>Density (↓)</td><td>94.61</td><td>94.35</td><td>94.49</td><td>93.87</td><td>94.32</td><td>94.28</td><td>94.50</td><td>94.18</td><td></td></tr><tr><td>Metric (↑)</td><td>90.27</td><td>90.79</td><td>93.89</td><td>95.99</td><td>91.52</td><td>85.11</td><td>81.40</td><td>61.33</td><td>86.29</td></tr><tr><td rowspan="4">Prefix-T (1.11%)</td><td rowspan="2">DEFT</td><td>Density (↓)</td><td>43.64</td><td>49.08</td><td>48.65</td><td>45.86</td><td>87.61</td><td>44.00</td><td>85.83</td><td>57.01</td><td></td></tr><tr><td>DC (%) (↑)</td><td>53.87</td><td>47.98</td><td>48.51</td><td>51.15</td><td>7.11</td><td>53.33</td><td>9.17</td><td>39.47</td><td>38.82</td></tr><tr><td rowspan="2">PEFT</td><td>Metric (↑)</td><td>89.99</td><td>89.77</td><td>94.59</td><td>95.64</td><td>90.52</td><td>86.76</td><td>74.84</td><td>59.10</td><td>85.15</td></tr><tr><td>Denity(D)</td><td>94.88</td><td>94.3</td><td>94.14</td><td>94.20</td><td></td><td></td><td>94.14</td><td></td><td></td></tr><tr><td rowspan="4"></td><td rowspan="2">DEFT</td><td></td><td></td><td></td><td></td><td></td><td>94.24</td><td>93.87</td><td></td><td>93.73</td><td>85.09</td></tr><tr><td>Density (↓)</td><td>50.83</td><td>46.16</td><td>56.19</td><td>51.91</td><td>74.53</td><td>71.88</td><td>76.51</td><td>51.18</td><td></td></tr><tr><td rowspan="2">PEFT</td><td>DC(%) (1)</td><td>46.43</td><td>51.06</td><td>40.31</td><td>44.89</td><td>20.91</td><td>23.43</td><td>18.73</td><td>45.4</td><td>36.39</td></tr><tr><td>Metric (↑)</td><td>81.53</td><td>84.17</td><td>80.88</td><td>84.63</td><td>22.66</td><td>71.159</td><td>51.98</td><td>2.18*</td><td>59.89</td></tr><tr><td rowspan="4">Prompt-T(0.31%)</td><td rowspan="2"></td><td>Density()</td><td>93.78</td><td>93.74</td><td>93.10</td><td>93.64</td><td>93.77</td><td>93.67</td><td>93.82</td><td>9.55</td><td>59.92</td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td rowspan="2">DEFT</td><td>Density (↓)</td><td>88.84</td><td>89.29</td><td>93.00</td><td>92.90</td><td>93.74</td><td>93.65</td><td>93.79</td><td>93.05</td><td></td></tr><tr><td>DC (%) (↑)</td><td>5.27</td><td>4.75</td><td>0.11</td><td>0.79</td><td>0.03</td><td>0.02</td><td>0.03</td><td>0.53</td><td>1.44</td></tr></table></body></html>
+
+![](images/4ee645fbee9c3dc2eee9c4fdad87be5364fb79f488e13e81370db3ee0b6e28b9.jpg)  
+Figure 2: Percentage of non-zeros (density). Layerwise non-zeros $( \% )$ for $\mathrm { R o B E R T a _ { L a r g e } }$ (a,d), Flan- $\cdot \mathrm { T } 5 _ { \mathrm { x l } }$ (b,e) with Adapte and Flan- $\boldsymbol { \cdot } \boldsymbol { \mathrm { T 5 } } _ { \mathrm { X X L } }$ (c.f) with QLoRA on the validation set of different tasks. The $\mathbf { \boldsymbol { x } }$ -axis is the layer index.
+
+on the ASIC simulator.
+
+# Results on SQuAD Dataset
+
+Table 3 offers a comparative analysis of various methods applied to SQuAD using four T5 models. The evaluation focuses on two performance metrics: F1 score and ExactMatch, which measure the accuracy of the model’s answers. Additionally, the table provides information on the encoder and decoder activation densities. In our experiments, we introduce the density loss for both encoder and decoder layers with an equal weightage of 1.0, though introducing the density loss for only one of them is also possible. $\mathrm { T } 5 _ { \mathrm { S m a l l } }$ and $\mathrm { T } 5 _ { \mathrm { B a s e } }$ use ReLU activations, while Flan- $\lvert \mathrm { T } 5 _ { \mathrm { X L } }$ and Flan$\mathrm { T } 5 _ { \mathrm { X X L } }$ use Gated FFN blocks with GeLU-based activation.
+
+Larger models introduce more sparse activation patterns with DEFT. For ReLU-based models $\mathrm { \Delta T 5 _ { S m a l l } }$ and $\mathrm { T } 5 _ { \mathrm { B a s e , } }$ ), using the tanh-approximation Eq. (4) in the density loss, DEFT achieves comparable performance to PEFT with notable reductions in activation density. For $\mathrm { T } 5 _ { \mathrm { S m a l l } }$ , encoder density reductions range from $2 6 . 2 6 \%$ to $3 0 . 6 2 \%$ and decoder from $5 2 . 0 8 \%$ to $6 1 . 9 6 \%$ . For ${ \mathrm { T } } 5 _ { \mathrm { B A S E } }$ , encoder reductions are $3 9 . 0 1 \%$ to $4 7 . 7 7 \%$ and decoder $7 0 . 1 9 \%$ to $8 1 . 8 2 \%$ , without sacrificing downstream performance.
+
+Table 2: Energy Consumption Ratio with different models using ASIC Simulator developed in (Shumailov et al. 2021).   
+
+<html><body><table><tr><td>Model</td><td>Method</td><td>ER(↓)</td></tr><tr><td rowspan="2">RoBERTaLarge (Adapter)</td><td>PEFT DEFT</td><td>0.85 0.78</td></tr><tr><td>Energy Change(%)</td><td>8.23%</td></tr><tr><td rowspan="3">Flan-T5xL (Adapter)</td><td>PEFT</td><td>1.00</td></tr><tr><td>DEFT</td><td>0.87</td></tr><tr><td>Energy Change(%)</td><td>13%</td></tr><tr><td rowspan="3">Flan-T5xxL (QLoRA)</td><td>PEFT DEFT</td><td>1.00</td></tr><tr><td></td><td>0.85</td></tr><tr><td>Energy Change(%)</td><td>15%</td></tr></table></body></html>
+
+Table 3: Performance comparison of different methods on Question Answering Dataset (SQuAD) with T5 models. EM: Exact-Match, ED: Encoder Density ; DD: Decoder Density   
+
+<html><body><table><tr><td rowspan="2">Model</td><td rowspan="2">Module (% Trainable)</td><td rowspan="2">Loss Type</td><td colspan="4">SQuAD</td></tr><tr><td>F1（↑）</td><td>EM(↑)</td><td>ED(↓)</td><td>DD(↓)</td></tr><tr><td rowspan="6">T5- Small (60M)</td><td rowspan="2">Adapter</td><td>PEFT</td><td>82.58</td><td></td><td></td><td></td></tr><tr><td></td><td></td><td>74.49</td><td>4.76</td><td>4.07</td></tr><tr><td>(0.33%)</td><td>DC(%)</td><td></td><td></td><td>26.26</td><td>52.08</td></tr><tr><td rowspan="2">LoRA</td><td>PEFT</td><td>82.60</td><td>74.54</td><td>4.80</td><td>3.97</td></tr><tr><td>DEFT</td><td>82.38</td><td>74.19</td><td>3.33</td><td>1.51</td></tr><tr><td rowspan="2">(0.96%)</td><td>DC(%)</td><td></td><td></td><td>30.62</td><td>61.96</td></tr><tr><td>PEFT</td><td>88.28</td><td>81.19</td><td>2.64</td><td>3.22</td></tr><tr><td rowspan="5">T5- Base (220M)</td><td>Adapter (0.40%)</td><td>DEFT</td><td>88.21</td><td>81.08</td><td>1.61</td><td>0.96</td></tr><tr><td rowspan="2">LoRA</td><td>DC(%)</td><td></td><td></td><td>39.01</td><td>70.19</td></tr><tr><td>PEFT</td><td>88.32</td><td>81.30</td><td>2.70</td><td>3.19</td></tr><tr><td rowspan="2">(0.78%)</td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>DC(%)</td><td></td><td></td><td>47.77</td><td>81.82</td></tr><tr><td rowspan="2">Flan-T5xL (3B)</td><td>Adapter</td><td>DEFT</td><td>92.581</td><td>87.28</td><td>99.59</td><td>9.96</td></tr><tr><td rowspan="2">(0.87%)</td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td>DC(%)</td><td></td><td></td><td>38.46</td><td>81.29</td></tr><tr><td rowspan="2">Flan-T5xXL</td><td rowspan="2">QLoRA</td><td>PEFT</td><td>92.84</td><td>86.75</td><td>99.97</td><td>99.82</td></tr><tr><td>DEFT</td><td>92.72</td><td>87.04</td><td>46.80</td><td>9.38</td></tr><tr><td>(11B)</td><td>(1.04%)</td><td>DC(%)</td><td></td><td></td><td>53.19</td><td>90.60</td></tr></table></body></html>
+
+For Flan-T5 models, which utilize GeLU activations, we used the $l _ { 0 }$ -approximation specified in Eq. (5) in the density loss of Eq. (6). We investigated our method on larger instruction-tuned models, namely Flan- $\lvert \mathrm { T } 5 _ { \mathrm { X L } }$ (3B) and Flan$\mathrm { \Delta T 5 _ { X X L } }$ (11B). From the results, our method consistently achieves comparable performance with PEFT while significantly reducing activation density for both encoder and decoder layers for larger models. For the Flan- $ { \mathrm { \cdot T } } 5 _ {  { \mathrm { X L } } }$ (3B) model with only $0 . 8 7 \%$ trainable parameters, we achieve density change $( \% )$ for the encoder $3 8 . 4 6 \%$ , while for the decoder, we achieve $8 1 . 2 9 \%$ when compared to PEFT methods. Similarly, for Flan- $\boldsymbol { \cdot } \boldsymbol { \mathrm { T } } 5 _ { \mathrm { X X L } }$ (11B) model, with only $1 . 0 4 \%$ trainable parameters, we achieve density change $( \% )$ of $5 3 . 1 9 \%$ for the encoder and $9 0 . 6 0 \%$ for Decoder compared to PEFT. These findings indicate that DEFT tends to induce sparser activation patterns as the model size increases.
+
+Layerwise Activation Sparsity Analysis. To provide further insights, we present layerwise non-zero $( \% )$ activation plots in Fig. 2 using Flan-T5 models on SQuAD. Both models have 24 layers for both encoder and decoder. The plots distinctly show that DEFT significantly reduces the number of non-zero activations in both the encoder (b,c) and decoder (e,f) layers. A notable observation is the more pronounced reduction in non-zeros in the decoder layers as compared to the encoder layers.
+
+Table 4: Performance comparison of ADA-DEFT on Question Answering Dataset (SQuAD) with Flan-T5 models.   
+
+<html><body><table><tr><td rowspan="2">Model</td><td rowspan="2">Module (% Trainable)</td><td rowspan="2">Loss Type</td><td colspan="4">SQuAD</td></tr><tr><td>F1 (↑)</td><td>EM(↑)</td><td>Runtime (s)(↓)</td><td>Memory (GB)(↓)</td></tr><tr><td rowspan="2">Flan-T5BASE</td><td rowspan="2">LoRA</td><td>ADA-PEFT</td><td>89.60</td><td>82.85</td><td>511.83</td><td>0.95</td></tr><tr><td>ADA-DEFT</td><td>89.50</td><td>82.60</td><td>494.13</td><td>0.88</td></tr><tr><td rowspan="2">(250M)</td><td rowspan="2">(2.67%)</td><td>Saving (%)</td><td></td><td></td><td>3.46</td><td>7.37</td></tr><tr><td></td><td></td><td></td><td></td><td></td></tr><tr><td rowspan="2">Flan-T5xL (3B)</td><td rowspan="2">QLoRA (1.99%)</td><td>ADA-DEFT</td><td>93.11</td><td>87.56</td><td>1432.89</td><td>2.92</td></tr><tr><td>Saving(%)</td><td></td><td></td><td>8.79</td><td>17.46</td></tr><tr><td rowspan="2">Flan-T5xxL</td><td rowspan="2">QLoRA</td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>ADA-DEFT</td><td>92.74</td><td>86.50</td><td>3815.67</td><td>10.64</td></tr><tr><td>(11B)</td><td>(1.04%)</td><td>Saving(%)</td><td></td><td></td><td>2.79</td><td>2.54</td></tr></table></body></html>
+
+Energy Consumption Ratio for Flan-T5 models. In Table 2, we report energy consumption ratio and energy change $( \% )$ for Flan-T5 models. We can observe that DEFT leads to a decrease in energy consumption, especially for Flan$\mathrm { T } 5 _ { \mathrm { X X L } }$ , which demonstrates a noteworthy $15 \%$ decrease in energy consumption with DEFT compared to PEFT.
+
+ADA-DEFT with Flan-T5 models. We compare the ADA-DEFT method with the baseline ADA-PEFT across various configurations of the Flan-T5 model on the SQuAD dataset in Table 4. ADA-DEFT achieves comparable F1 and Exact Match (EM) scores to ADA-PEFT while offering substantial runtime and memory reductions. For the Flan${ \mathrm { T } } 5 _ { \mathrm { B A S E } }$ , ADA-DEFT achieves an F1 score of 89.50 and an EM score of 82.60, with a $3 . 4 6 \%$ runtime and $7 . 3 7 \%$ memory savings. For the Flan- $\mathrm { T } 5 _ { \mathrm { X L } }$ , it records a $8 . 7 9 \%$ runtime and $1 7 . 4 6 \%$ memory savings, and for the Flan- $\mathrm { T } 5 _ { \mathrm { X X L } }$ , the savings are $2 . 7 9 \%$ in runtime and $2 . 5 4 \%$ in memory. These efficiencies highlight ADA-DEFT’s capability to reduce resource usage without sacrificing performance. The final learned adaptive layerwise weights for both the encoder and decoder of all Flan-T5 models are shown in Fig. 3a. From the layerwise plots, we observe that for some of the MLP blocks, ADA-DEFT sets the adaptive layer weight to 0, allowing us to skip the MLP block during inference. This results in runtime and memory savings.
+
+In summary, the results show that the Adapter and LoRA modules can maintain competitive performance on SQuAD while achieving notable reductions in activation density and runtime.
+
+# Pruning of PEFT/DEFT Models
+
+Here, we explore the effects of model pruning using the WANDA metric (Sun et al. 2023b). The WANDA metric combines weight magnitude and activations to identify parameters for pruning.
+
+Given a weight matrix $W \in \mathbb { R } ^ { d _ { \mathrm { o u t } } \times d _ { \mathrm { i n } } }$ and input activations $X \in \mathbb { R } ^ { N \times K \times d _ { \mathrm { i n } } }$ , the imp∈ortance score of each weight is calculated as:
+
+$$
+I _ { i j } = | W _ { i j } | \cdot | | X _ { j } | | _ { 2 }
+$$
+
+where $\vert \vert X _ { j } \vert \vert _ { 2 }$ is the $l _ { 2 }$ norm across the $N \times K$ tokens of the $j$ th feature.
+
+We randomly select 128 samples from the training set of each downstream dataset and use the WANDA metric to prune the first dense layer in the MLP blocks of transformer layers. The results are shown for models first adapted using PEFT/DEFT and then pruned using WANDA.
+
+![](images/00ce88081fed858760f578aaca11c62ee3f7d56cd798bcde666e635fccf10872.jpg)
+
+![](images/3982dea9c856cb3d2c832a04325cd543de71b777950ac9135f10174806321cf8.jpg)  
+(a) Adaptive Layerwise Weights. Learned Adaptive layerwise weights for ADA-DEFT and ADA-PEFT on SQuAD dataset using Flan-T5 models.   
+(b) Metric v/s Sparsity. Performance of $\mathrm { R o B E R T a _ { L a r g e } }$ with Adapter for different pruning thresholds for MLP block using WANDA metric on the validation set. (a) and (c): Accuracy and Density $( \% )$ on SST2 dataset. (b) and (d): Accuracy and Density $( \% )$ on MNLI dataset.   
+Figure 3: Comparison of Adaptive Layerwise Weights and Pruning Performance.
+
+Fig.3b shows the performance of the pruned RoBERTaLarge model on the SST-2 and MNLI validation sets. Initially, as sparsity increases, performance remains stable, but beyond a threshold, accuracy declines. DEFT consistently achieves higher or comparable accuracy than PEFT at various sparsity levels while maintaining greater activation sparsity. For example, as shown in Fig. 3b (b,d), at $50 \%$ sparsity, the model utilizing DEFT attains an accuracy of $6 0 . 9 6 \%$ with an activation Density of $5 7 . 6 5 \%$ , outperforming PEFT, which achieves only $5 1 . 7 3 \%$ accuracy with a significantly higher Density of $9 9 . 0 9 \%$ . This outcome suggests that DEFT can effectively complement weight pruning methods like WANDA, enabling models to benefit from both activation and weight sparsity.
+
+vation sparsity in MLP layers of frozen pre-trained transformer blocks. We demonstrate the effectiveness of DEFT for reducing the activation density without hurting downstream performance compared to PEFT by various experiments on GLUE and SQuAD 1.0 benchmark with different models, and with different parameter-efficient modules. Extensive experimental results confirm that our proposed methods provide new means for density-efficient PEFT of pre-trained language models to improve inference efficiency while maintaining similar model performance. We also showcase the effect of pruning with the DEFT models and find that DEFT can be used as a complementary method with weight pruning methods, leading to both activation and weight sparsity. We believe that our proposed DEFT opens a new avenue for density-efficient fine-tuning of pre-trained models.
+
+# Conclusion
+
+In this work, we presented our methods DEFT and ADADEFT, novel add-on modules to PEFT for inducing acti
+
+# Acknowledgments
+
+The authors thank Ming-Hung Chen and I-Hsin Chung at IBM Research for their help and discussion.

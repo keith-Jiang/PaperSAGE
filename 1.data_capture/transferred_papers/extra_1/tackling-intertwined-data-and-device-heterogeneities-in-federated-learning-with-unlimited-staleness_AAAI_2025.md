@@ -1,0 +1,299 @@
+# Tackling Intertwined Data and Device Heterogeneities in Federated Learning with Unlimited Staleness
+
+Haoming Wang and Wei Gao
+
+University of Pittsburgh hw.wang $@$ pitt.edu,weigao $@$ pitt.edu
+
+# Abstract
+
+Federated Learning (FL) can be affected by data and device heterogeneities, caused by clients’ different local data distributions and latencies in uploading model updates (i.e., staleness). Traditional schemes consider these heterogeneities as two separate and independent aspects, but this assumption is unrealistic in practical FL scenarios where these heterogeneities are intertwined. In these cases, traditional FL schemes are ineffective, and a better approach is to convert a stale model update into a unstale one. In this paper, we present a new FL framework that ensures the accuracy and computational efficiency of this conversion, hence effectively tackling the intertwined heterogeneities that may cause unlimited staleness in model updates. Our basic idea is to estimate the distributions of clients’ local training data from their uploaded stale model updates, and use these estimations to compute unstale client model updates. In this way, our approach does not require any auxiliary dataset nor the clients’ local models to be fully trained, and does not incur any additional computation or communication overhead at client devices. We compared our approach with the existing FL strategies on mainstream datasets and models, and showed that our approach can improve the accuracy by up to $2 5 \%$ and reduce the number of required training epochs by up to $3 5 \%$ .
+
+# Code — https://github.com/pittisl/intertwined-FL Extended version — https://arxiv.org/abs/2309.13536
+
+# Introduction
+
+Federated Learning (FL) (McMahan 2016) could be affected by both data and device heterogeneities. Data heterogeneity is the heterogeneity of non-i.i.d. data distributions on different clients, which make the aggregated global model biased and reduces model accuracy (Konecˇny´ 2016; Zhao 2018). Device heterogeneity arises from clients’ variant latencies in uploading their local model updates to the server, due to their different local resource conditions (e.g., computing power, network link speed, etc). An intuitive solution to device heterogeneity is asynchronous FL, which does not wait for slow clients but updates the global model whenever having received a client update (Xie and Gupta. 2019). In this case, if a slow client’s excessive latency is longer than a training epoch, it will use an outdated global model to compute its model update, which will be stale when aggregated at the server and affect model accuracy. To tackle staleness, weighted aggregation can be used to apply reduced weights on stale model updates (Chen and Jin. 2019; Wang 2022).
+
+Most existing work considers data and device heterogeneities as two separate and independent aspects in FL (Zhou 2021). This assumption, however, is unrealistic in many FL scenarios where these two heterogeneities are intertwined: data in certain classes or with particular features may only be available at some slow clients. For example, in FL for hazard rescue (Ahmed et al. 2020), only devices at hazard sites have crucial data about hazards, but they usually have limited connectivity or computing power to timely upload model updates. Similar situations could also happen in FL scenarios where data with high importance to model accuracy is scarce and hard to obtain, such as disease evaluation in smart health, where only few patients have severe symptoms but are very likely to report symptoms with long delays due to their worsening conditions (Chen et al. 2017).
+
+In these cases, if reduced weights are applied to stale model updates from slow clients, important knowledge in these updates will not be sufficiently learned and hence affects model accuracy. Instead, a better approach is to equally aggregate all model updates and convert a stale model update into a unstale one, but existing techniques for such conversion are limited to a small amount of staleness. For example, first-order compensation can be applied on the gradient delay (Zheng et al. 2017), by assuming staleness in FL is smaller than one epoch to ignore all the high-order terms in the difference between stale and unstale model updates (Zhou and Lv. 2021). However, in the aforementioned FL scenarios, it is common to witness excessive or even unlimited staleness, and our experiments in show that the compensation error will quickly increase with staleness.
+
+To efficiently tackle the intertwined data and device heterogeneities with unlimited staleness, in this paper we present a new FL framework that uses gradient inversion at the server to convert stale model updates, by mimicking the local models’ gradients produced with their original training data (Zhu and Han. 2019a). The server inversely computes the gradients from clients’ stale model updates to obtain an estimated distribution of clients’ training data, such that a model trained with the estimated data distribution will exhibit a similar loss surface as that of using clients’ original training data. The server uses such estimated data distributions to retrain the current global model, as estimations of clients’ unstale model updates. Compared to other model conversion methods, such as training an extra generative model (Yang 2019) or optimizing input data with constraints (Yin 2020), our approach has the following advantages:
+
+• Our approach retains the clients’ FL procedure to be unchanged, and hence does not incur any additional computation or communication overhead at client devices, which usually have weak capabilities in FL scenarios. • Our approach does not require any auxiliary dataset nor the clients’ local models to be fully trained, and can hence be widely applied to practical FL scenarios. • In our approach, the server will not recover any original samples or labels of clients’ local training data, and hence avoids impairing the clients’ data privacy.
+
+We evaluated our proposed technique by comparing with the mainstream FL schemes on multiple datasets and models. Experiment results show that when tackling intertwined data and device heterogeneities with unlimited staleness, our technique can significantly improve the trained model accuracy by up to $2 5 \%$ and reduce the required amount of training epochs by up to $3 5 \%$ . Since clients in FL need to compute and upload model updates to the server in every training epoch, such reduction of training epochs largely reduces the computing and communication overhead at clients.
+
+More technical details about our approach and experiment results can be found in our extended version on ArXiv: https: //arxiv.org/abs/2309.13536. In the rest of this paper, we will refer to different sections of the Technical Appendix, which can also be found in this extended version.
+
+# Background and Motivation
+
+In this section, we present preliminary results that demonstrate the ineffectiveness of existing methods in tackling intertwined data and device heterogeneities, hence motivating our proposed approach using gradient inversion.
+
+![](images/a1a5b7a6a484b281610821b718170cd9c22817b963a5d3bed64d9c08c174c00d.jpg)  
+Figure 1: The impact of staleness in FL
+
+# Tackling Intertwined Heterogeneities in FL
+
+Weighted aggregation is the most common method to address staleness in FL (Chen and Jin. 2019; Wang 2022), but brings improper bias towards fast clients and misses important knowledge in slow clients’ model updates, when data and device heterogeneities are intertwined. To show this, we conducted experiments using a real-world disaster image dataset (Mouzannar, Rizk, and Awad 2018), which contains 6k images of 5 disaster classes (e.g., fires and floods) with different levels of damage severity. In FL of 100 clients, we set data heterogeneity as that each client only contain samples in one data class, and set device heterogeneity as a staleness of 100 epochs on 15 clients with images of severe damage. When using this dataset to fine-tune a pre-trained ResNet18 model, results in Figure 1 show that staleness leads to large degradation of model accuracy, and weighted aggregation results in even lower accuracy than direct aggregation, because contributions from images of severe damage on stale clients are reduced by the weights1.
+
+On the other hand, if we increase the contributions from stale clients by using larger weights, although the model accuracy on these images of severe damage will improve, the larger weights will amplify the impacts of errors contained in stale model updates and hence affect the model’s overall accuracy in other data classes. Detailed results can be found in Appendix B.
+
+In practical scenarios such as natural disasters, such large or unlimited staleness is common due to interruptions in communication at disaster sites, and the staleness is too large for server to wait for any slow clients. The large performance degradation of weighted aggregation, then, motivates us to instead convert stale model updates to unstale ones.
+
+The only existing work on such conversion, to our best knowledge, uses the first-order Taylor expansion to compensate for errors in stale model updates (Zheng et al. 2017). For a stale update $g ( w _ { t - \tau } )$ , the estimated unstale update is:
+
+$$
+\begin{array} { r } { g ( w _ { t } ) \approx g ( w _ { t - \tau } ) + \nabla g ( w _ { t - \tau } ) ( w _ { t } - w _ { t - \tau } ) . } \end{array}
+$$
+
+Since the Hessian matrix $\nabla g ( w _ { t - \tau } )$ is difficult to compute for neural networks, it is approximated as
+
+$$
+\nabla g ( w _ { t - \tau } ) \approx \lambda \cdot g ( w _ { t - \tau } ) \odot g ( w _ { t - \tau } )
+$$
+
+where $\lambda$ is an empirical hyper parameter. However, this method can only applies to small amounts of staleness (Zhou, Ye, and Lv 2021; Li et al. $2 0 2 3 \mathrm { a }$ ; Tian et al. 2021), in which the high-order terms in the Taylor expansion can be negligible. To verify this, we use the same experiment setting as above and vary the amount of staleness from 0 to 50 epochs. As shown in Table 1, the error caused by high-order terms in Taylor expansion, measured in cosine distance and L1-norm difference with the unstale model updates, both significantly increase when staleness increases. These results motivate us to design techniques that ensure accurate conversion with unlimited staleness.
+
+# Gradient Inversion
+
+Our proposed approach builds on the existing techniques of gradient inversion (Zhu and Han. 2019b), which recovers the original training data from the gradient of a trained model. Its basic idea is to minimize the difference between the trained model’s gradient and the gradient computed from the recovered data. Denote a batch of training data as $( x , y )$ where $x$ denotes input data and $y$ denotes labels, gradient inversion solves the following optimization problem:
+
+![](images/f5e358420a170fe0d749c3fbd0b1b24678dfb9af413f372800534b2b8feb1277.jpg)  
+Figure 2: Our proposed method of tackling intertwined data and device heterogeneities in FL
+
+Table 1: Errors caused by high-order terms in Taylor expansion when using (Zheng et al. 2017)   
+
+<html><body><table><tr><td>Staleness (epoch) 二</td><td>5</td><td>10</td><td>20</td><td>50</td></tr><tr><td>Cos-dist error</td><td>0.08</td><td>0.22</td><td>0.33</td><td>0.53</td></tr><tr><td>L1-norm error</td><td>0.009</td><td>0.018</td><td>0.31</td><td>0.052</td></tr></table></body></html>
+
+$$
+( x ^ { \prime \ast } , y ^ { \prime \ast } ) = \arg \operatorname* { m i n } _ { ( x ^ { \prime } , y ^ { \prime } ) } \| \frac { \partial L [ ( x ^ { \prime } , y ^ { \prime } ) ; w ^ { t - 1 } } { \partial w ^ { t - 1 } } - g ^ { t } \| _ { 2 } ^ { 2 } ,
+$$
+
+where $( x ^ { \prime } , y ^ { \prime } )$ is the recovered data, $w ^ { t - 1 }$ is the trained model, $L [ \cdot ]$ is model’s loss function, and $g ^ { t }$ is the gradient calculated with training data and $w ^ { t - 1 }$ . This problem can be solved using gradient descent to iteratively update $( x ^ { \prime } , y ^ { \prime } )$ .
+
+The quality of recovered data relates to the amount of data samples recovered. Recovering a larger dataset will confuse the learned knowledge across different data samples and reduce the quality of recovered data, and existing methods are limited to recovering a small batch $( < 4 8 )$ of data samples (Yin 2021; Geiping 2020; Zhao and Bilen. 2020). This limitation, however, contradicts with the typical size of clients’ datasets in FL, which are usually more than hundreds of samples (Wu et al. 2023; Reddi et al. 2020). This limitation indicates that we may utilize gradient inversion to estimate clients’ training data distributions without revealing individual samples of clients’ local data.
+
+# Method
+
+In this paper, we consider a semi-asynchronous FL scenario where some normal clients follow synchronous FL and some slow clients update asynchronously (Chai 2021). In this case, we measure staleness by the number of epochs that slow clients’ updates are delayed. At time $t ^ { 2 }$ , a normal client $i$ provides its model update as
+
+$$
+w _ { i } ^ { t } = L o c a l U p d a t e ( w _ { g l o b a l } ^ { t } ; D _ { i } ) ,
+$$
+
+local dataset $D _ { i }$ to produce $\boldsymbol { w } _ { i } ^ { t }$ . When the client $i$ ’s model update is delayed, the server will receive a stale model update from $i$ at time $t$ as
+
+where $L o c a l U p d a t e [ \cdot ]$ is client $i$ ’s local training program, which uses the current global model tglobal and client i’s
+
+$$
+w _ { i } ^ { t - \tau } = L o c a l U p d a t e ( w _ { g l o b a l } ^ { t - \tau } ; D _ { i } ) ,
+$$
+
+where the amount of staleness is indicated by $\tau$ and $w _ { i } ^ { t - \tau }$ is computed from an outdated global model wtgl−oτbal.
+
+Due to intertwined data and device heterogeneities, we consider that the received $w _ { i } ^ { t - \tau }$ contains unique knowledge about $D _ { i }$ that is only available from client $i$ , and such knowledge should be sufficiently incorporated into the global model. To do so, as shown in Figure 2, the server uses gradient inversion described in Eq. (3) to recover an intermediate dataset $D _ { r e c }$ from $w _ { i } ^ { t - \tau }$ . Being different from the existing work of gradient inversion (Zhu and Han. 2019b) that aims to fully recover the client $i$ ’s training data $D _ { i }$ , we only expect $D _ { r e c }$ to represent the similar data distribution with $D _ { i }$ .
+
+The server then computes an estimation of $\boldsymbol { w } _ { i } ^ { t }$ from $w _ { i } ^ { t - \tau }$ , namely $\hat { w } _ { i } ^ { t }$ , by using $D _ { r e c }$ to train its current global model wtglobal, and aggregates wˆit with model updates from other clients to update its global model in the current epoch. During this procedure, the server only receives the stale model update $\overset { \cdot } { w _ { i } ^ { t - \tau } }$ from client $i$ , which does not expose $i$ ’s local data $D _ { i }$ to the server. The client $i$ does not need to perform any extra computations for such estimation of $\hat { w } _ { i } ^ { t }$ , either.
+
+# Estimating Local Data Distributions from Stale Model Updates
+
+To compute $D _ { r e c }$ , we first fix the size of $D _ { r e c }$ and randomly initialize each data sample and label in $D _ { r e c }$ . Then, we iteratively update $D _ { r e c }$ by minimizing
+
+$$
+D i s p a r i t y [ L o c a l U p d a t e ( w _ { g l o b a l } ^ { t - \tau } ; D _ { r e c } ) , w _ { i } ^ { t - \tau } ] ,
+$$
+
+using gradient descent, where $D i s p a r i t y [ \cdot ]$ is a metric to evaluate how much $w _ { i } ^ { t - \tau }$ changes if being retrained using $D _ { r e c }$ . In FL, a client’s model update comprises multiple local training steps instead of a single gradient. Hence, to use gradient inversion in $\mathrm { F L }$ , we substitute the single gradient computed from $D _ { r e c }$ in Eq. (3) with the local training outcome using $D _ { r e c }$ . In this way, since the loss surface in the model’s weight space computed using $D _ { r e c }$ is similar to that using $D _ { i }$ , we can expect a similar gradient being computed.
+
+We first visualize it by using MNIST dataset to train LeNet model. Figure 3 shows that, the loss surface computed using $D _ { r e c }$ is similar to that using $D _ { i }$ in the proximity of $( w _ { g l o b a l } ^ { t - \tau } )$ , and the computed gradient is very similar, too.
+
+Using 𝑫 Using 𝑫𝒓𝒆𝒄 Using random noise The current global model in loss space Direction of computed gradient
+
+To verify the accuracy of using $\hat { w } _ { i } ^ { t }$ to estimate $\boldsymbol { w } _ { i } ^ { t }$ , we compare this estimation with first-order estimation, by computing their discrepancies with the true unstale model update under different amounts of staleness. Results in Figure 4 show that, compared to First-order Compensation(Zheng et al. 2017), our estimation based on gradient inversion can reduce the estimation error by up to $50 \%$ , especially when staleness excessively increases to more than 50 epochs.
+
+Another key issue is how to decide the size of $D _ { r e c }$ . Since gradient inversion is equivalent to data resampling in the original training data’s distribution, a sufficiently large size of $D _ { r e c }$ is necessary to ensure unbiased data sampling and sufficient minimization of gradient loss through iterations. On the other hand, when the size of $D _ { r e c }$ is too large, the computational overhead of each iteration would be unnecessarily too high. More details about how to decide the size of $D _ { r e c }$ are in Appendix D. Further results about our method’s error with various local training programs can also be found in Appendix E.
+
+0.5 0.05   
+0.3 0.2 0.023   
+8 First-order 1 First-order   
+0.1 compensation 0.01 compensation Gradient inversion Gradient inversion 0.0 based compensation 0.00 based compensation 0 10 20 30 40 50 0 10 20 30 40 50 Staleness (Epoch) Staleness (Epoch) (a) Cosine distance (b) L1-norm difference
+
+# Switching back to Vanilla FL in Later Stages of FL
+
+As shown in Figure 4, the estimation made by gradient inversion also contains errors, because the gradient inversion loss can not be reduced to zero. As the FL training progresses and the global model converges, the difference between the previous and current global models will reduce to 0, and hence the difference between stale and unstale model updates will also reduce, eventually to 0. In this case, in the late stage of FL training, the error in our estimated model update $( \hat { w } _ { i } ^ { t } )$ will exceed that of the original stale model update $w _ { i } ^ { t - \tau }$
+
+To verify this, we conducted experiments by training the LeNet model with the MNIST dataset, and evaluated the average values of $E _ { 1 } ( t ) = D i s p a r i t y [ \hat { w } _ { i } ^ { t } ; w _ { i } ^ { t } ]$ and $E _ { 2 } ( t ) =$ Disparity $[ w _ { i } ^ { t - \tau } ; w _ { i } ^ { t } ]$ across different clients, using both cosine distance and L1-norm difference as the metric. Results
+
+0.43 VGwaritanhidlilseatnaFltLeinveesrs ion 0.04 0.05 VwaitnhillsataFlLeness based compensation 0 based compensation 0.03   
+0.21 0.02 0.01   
+0.0 0 20 40 60 80 100 0.00 0 20 40 60 80 100 Training progress (%) Training progress (%) (a) Cosine Distance (b) L1-norm difference
+
+Deciding the switching point. Hence, in the late stage of FL training, it is necessary to switch back to vanilla FL and directly use stale model updates in aggregation. The difficulty of deciding such switching point is that the true unstale model update $( \hat { w } _ { i } ^ { t } )$ is unknown at time $t$ . Instead, the server will be likely to receive $\boldsymbol { w } _ { i } ^ { t }$ at a later time, namely $t + \tau ^ { \prime }$ . Therefore, if we found that $E _ { 1 } ( t ) > E _ { 2 } ( t )$ at time $t + \tau ^ { \prime }$ when the server receives $\boldsymbol { w } _ { i } ^ { t }$ at $t + \tau ^ { \prime }$ , we can use $t + \tau ^ { \prime }$ as the switching point instead of $t$ . Doing so will result in a delay in switching, but our experiment results in Table 2 with different switching points show that the FL training is insensitive to such delay.
+
+Table 2: FL training results with different switching points. $E _ { 1 } ( t ) > E _ { 2 } ( t )$ when $\scriptstyle t = 1 5 5$ , but different switching points exhibit very similar training performance.   
+
+<html><body><table><tr><td>Switch point (epoch)</td><td>None</td><td>135</td><td>155</td><td>175</td></tr><tr><td>Model accuracy</td><td>59.3%</td><td>68.1%</td><td>67.4%</td><td>67.5%</td></tr></table></body></html>
+
+In practice, when we make such switch, the model accuracy in training will experience a sudden drop due to the inconsistency of gradients between $\hat { w } _ { i } ^ { t }$ and $w _ { i } ^ { t - \tau }$ . To avoid such sudden drop, at time $t + \tau ^ { \prime }$ , instead of immediately switching to using $\hat { w } _ { i } ^ { t }$ in server’s model aggregation, we use a weighted average of $\gamma \hat { w } _ { i } ^ { t } + ( 1 - \gamma ) w _ { i } ^ { t - \tau }$ in aggregation, so as to ensure smooth switching. $\gamma$ linearly decays from 1 to 0 within a time window, and the length of this window can be flexibly adjusted to accommodate the optimization of model accuracy. Experiment results in Table 3 show that, when this length is set to $10 \%$ of training time before reaching the switching point, the model accuracy is maximized.
+
+Table 3: The time needed for $\gamma$ to decay from 1 to 0   
+
+<html><body><table><tr><td>Time of decay</td><td>一 0%</td><td>5%</td><td>10%</td><td>20%</td></tr><tr><td>Model accuracy</td><td>67.4%</td><td>69.0%</td><td>70.2%</td><td>69.8%</td></tr></table></body></html>
+
+# Computationally Efficient Gradient Inversion
+
+Our basic design rationale is to retain the clients’ FL procedure to be unchanged, and offload all the extra computations incurred by gradient inversion to the server. In this way, we can then focus on reducing the server’s computing cost of gradient inversion, which is caused by the large amount of iterations involved, using the following two methods.
+
+First, we reduce complexity of the objective function in gradient inversion by sparsification, which only involve the important gradients with large magnitude into iterations of gradient inversion. Existing work has verified that gradients in mainstream models are highly sparse and only few gradients have large magnitudes (Lin et al. 2017). Hence, we use a binary mask $M a s k [ \cdot ]$ to selecting elements in $w _ { i } ^ { t - \dot { \tau } }$ with the top- $K$ magnitudes and only involve these elements to gradient inversion. As shown in Table 4, by only involving the top $5 \%$ of gradients, we can reduce around $80 \%$ of computation measured as the number of iterations in gradient inversion, with very slight increase in the error of estimating unstale model updates. Besides, we further explored the impact of such error caused by sparsification on the model accuracy, and results are in Appendix F.
+
+Table 4: Reduction of computation and error of estimating unstale model updates, with different sparsification rates   
+
+<html><body><table><tr><td>Sparsification rate</td><td>0%</td><td>90% 95%</td><td>99%</td></tr><tr><td>Reduction of comput. (%)</td><td>0%</td><td>68% 80%</td><td>93%</td></tr><tr><td>Estimation error</td><td>0.28</td><td>0.29 0.31</td><td>0.57</td></tr></table></body></html>
+
+Since in most cases the clients’ local data remains fixed, we do not need to start iterations of gradient inversion every time from a random initialization, but could instead optimize $D _ { r e c }$ from those calculated in the previous training epochs. Our experiments in Table 5 show that, when the clients’ local data remains fixed, we can further reduce the amount of iterations in gradient inversion by another $43 \%$ . Even if such client data is only partially fixed (e.g., changed by $20 \%$ ), we can still achieve non-negligible reduction of such iterations.
+
+Table 5: The number of iterations in gradient inversion with different percentages of changes in clients’ local data   
+
+<html><body><table><tr><td>Amount of data changed</td><td>0%</td><td>5%</td><td>20%</td><td>50%</td></tr><tr><td>Computation saved</td><td>43%</td><td>21%</td><td>12%</td><td>6%</td></tr></table></body></html>
+
+Note that, we only apply gradient inversion to stale model updates containing unique knowledge not present in other model updates. Besides, most FL systems (Charles et al. 2021) keep the number of clients in a global round constant. Once such number is sufficient (e.g., 10-50 even for FL with thousands of clients), further increasing such number yields little performance gains but increases overhead and causes catastrophic training failure (Ro et al. 2022). Hence, the server’s overhead of gradient inversion, even in large-scale FL systems, will not largely increase. Such scalability is further discussed in Appendix G.
+
+# Protecting Clients’ Data Privacy
+
+Although we used gradient inversion to estimate local data distributions from stale model updates, in most FL settings, it would be difficult or nearly impossible for the server to recover, either the stale clients’ local data or the labels, from the knowledge about such distributions, especially when applying the sparsification method described before.
+
+![](images/ae4694f50226df27896f3b148859a273a307688d9b2483951a5e73c38fb20a60.jpg)  
+Figure 6: Recovered images under different sparsification rates, with the CIFAR-10 dataset and the LeNet model
+
+Protecting data samples. The difficulty of recovering clients’ local data samples is proportional to the size of clients’ local data and the complexity of local training. However, even under the easiest scenario where client’s dataset only contains one sample and local training is just one-step gradient descent, such recovery will still be unsuccessful.
+
+More specifically, although gradient inversion can recover the majority of data samples’ pixels as shown in Figure 6(a) when no sparsification is applied, the quality of such recovery quickly drops when moderate sparsification is applied, as shown in Figure 6(c) and 6(d). This is because sparsification effectively reduces the scope of knowledge available for gradient inversion to recover data. Results in Table 6 with multiple perceptual image quality metrics, including LPIPS (Zhang 2018) and FID (Heusel et al. 2017), further verify that such recovered images cannot be recognized in human eyes. Essentially, when $9 5 \%$ sparsification rate is applied, the quality of recovered images is similar to that of noise. We also assessed the possibility of a neural network classifier (e.g., a ResNet-18 model) to recognize the recovered images. Results in the last row of Table 6 show that with the $9 5 \%$ sparsification rate, the classification accuracy is nearly equivalent to random guessing.
+
+Besides, since our method only modifies the FL operations on the server and keeps other FL steps (e.g., the clients’ local model updates and client-server communication) unchanged, statistical privacy methods, such as differential privacy, can also be applied to local clients in our approach, just like how it applies to vanilla FL. Each client can independently add Gaussian noise to its local model updates, before sending the updates to the server (Geyer, Klein, and Nabi 2017). Similarly, it can also apply to our privacy protection method, by adding noise to the gradient after sparsification. Protecting data labels. Gradient inversion can be used to recover labels of client’s local data (Zhu and Han. 2019b; Zhao and Bilen. 2020). As shown in Table 7, while such accuracy of label recovery can be as high as $8 5 \%$ if no protection method is used, applying $9 5 \%$ sparsification can effectively reduce such accuracy to $6 6 . 7 \%$ . Additionally, such accuracy can be further reduced to $4 6 . 4 \%$ by adding noise $\acute { \iota } v a r = \mathrm { 1 0 ^ { - 3 } } .$ ) to the gradient, with slight reduction $( 3 \% )$ of the trained model’s accuracy.
+
+Table 6: The quality of recovered images with different sparsificaition rates (SR) on CIFAR-10 dataset   
+
+<html><body><table><tr><td>一</td><td>30% SP</td><td>75% SP</td><td>95% SP</td><td>Noise</td></tr><tr><td>MSE↓</td><td>0.014</td><td>0.65</td><td>2.75</td><td>1.12</td></tr><tr><td>PSNR↑</td><td>155</td><td>77.9</td><td>41.8</td><td>47.8</td></tr><tr><td>LPIPS↓</td><td>0.04</td><td>0.13</td><td>0.56</td><td>0.50</td></tr><tr><td>FID↓</td><td>57</td><td>102</td><td>391</td><td>489</td></tr><tr><td>ACC↑</td><td>87.8</td><td>34.7</td><td>11.2</td><td>10.4</td></tr></table></body></html>
+
+Table 7: Accuracy of label recovery under different protection methods and sparsification rates (SR)   
+
+<html><body><table><tr><td>Protectionmethod</td><td>None</td><td>95% SP</td><td>95% SP+noise</td></tr><tr><td>Recovery accuracy</td><td>85.5%</td><td>66.7%</td><td>46.4%</td></tr></table></body></html>
+
+Gradient inversion should only be applied to stale clients when data and device heterogeneities are intertwined, i.e., the clients’ local data is unique and unavailable elsewhere. However, to properly decide such uniqueness, the server will need to know the class labels of client’s data, hence impairing the clients’ data privacy. Instead, we decide the data uniqueness by comparing the directions of stale clients’ model updates with the directions of other model updates from unstale clients, and only consider the stale clients’ data as unique if such difference is larger than a given threshold.
+
+We quantify such difference between model updates $\boldsymbol { w } _ { i } ^ { t }$ $\boldsymbol { w } _ { j } ^ { t }$ from client $i$ and $j$ using cosine distance, such that
+
+$$
+D _ { c } ( w _ { i } ^ { t } , w _ { j } ^ { t } ) = 1 - { w _ { i } ^ { t } } \cdot w _ { j } ^ { t } \bigg / \| w _ { i } ^ { t } \| \| w _ { j } ^ { t } \| ,
+$$
+
+and the threshold is computed as the average of cosine distances between unstale model updates at $t - \tau$ :
+
+$$
+\begin{array} { r l } & { \frac { 1 } { \| S _ { u n s t a l e } ^ { t - \tau } \| ^ { 2 } } \sum _ { j , k \in S _ { u n s t a l e } ^ { t - \tau } } [ D _ { c } ( w _ { j } ^ { t - \tau } , w _ { k } ^ { t - \tau } ) ] } \end{array}
+$$
+
+, where Stu−nsτtale is the set of unstale clients. Since the scale of cosine distance changes during FL training (Li et al. 2023b), the average value of cosine distance adds adaptivity to the threshold.
+
+We conducted preliminary experiments to evaluate if the server can accurately detect important model updates from unique client data. In the experiment, we emulate data heterogeneity by assigning each client with data samples from one random class, and results in Figure 8 show that the accuracy quickly grows to $5 9 0 \%$ as training progresses, and the average detection accuracy is $93 \%$ .
+
+Table 8: Detection accuracy from stale clients   
+
+<html><body><table><tr><td>Epoch</td><td>20</td><td>100</td><td>200</td><td>800</td></tr><tr><td>Detection accuracy</td><td>74.6%</td><td>89.2%</td><td>93.7%</td><td>94.5%</td></tr></table></body></html>
+
+# Experiments
+
+We evaluated our proposed technique in two FL scenarios. In the first scenario, all clients’ local datasets are fixed. In the second scenario, we consider a more practical FL setting, where clients’ local data is continuously updated and global data distributions are variant over time, due to dynamic changes of environmental contexts. The following baselines that tackle stale model updates in FL are used:
+
+• Unweighted aggregation (Unweighted): Directly aggregating stale model updates without applying weights. • Weighted aggregation (Weighted) (Shi et al. 2020): Applying weights to stale updates in aggregation, and weights are inversely proportional to staleness. • First-Order compensation (1st-Order) (Zheng et al. 2017; Zhu et al. 2022): Compensating errors in stale model updates using first-order Taylor expansion and Hessian approximation. • Future global weights prediction (W-Pred) (Hakimi et al. 2019): Assuming staleness as pre-known, the future global model is predicted by the first-order method above and used to compensate stale model updates. • FL with asynchronous tiers (Asyn-Tiers) (Chai et al. 2021): It clusters clients into asynchronous tiers based on staleness and uses synchronous FL in each tier.
+
+FedAvg (Zhou and Lv. 2021) is used in all experiments for aggregating model updates. Hence, Unweighted aggregation is FedAvg with staleness, and Weighted aggregation applies extra weights to model updates in $\mathrm { F e d A v g } ^ { 3 }$ . 1st-Order, Wpred, and our method further modify such weights via compensation, and Asyn-Tiers separately uses FedAvg in each synchronous tier. The usage of FedAvg is independent from our method and other baselines, and can be replaced by other FL frameworks such as FedProx (Li et al. 2020).
+
+For Weighted aggregation, we set the weights following (Shi et al. 2020) as $\bar { 1 } / \bar { ( 1 + e ^ { a ( \tau - b ) } ) }$ , where $\tau$ is the amount of staleness and we set hyper-parameters $a { = } 0 . 2 5$ and $\scriptstyle b = 1 0$ based on our experiment settings on staleness. For AsynTiers, we set two asynchronous tiers and when aggregating updates of different tiers, the updates are also weighted by the number of clients in different tiers (Chai et al. 2021).
+
+We also evaluated the performance of our technique without staleness, referred as “Unstale”, to assess the disparity between estimated and true values of unstale model updates, as well as the impact of estimation error on FL performance.
+
+# Experiment Setup
+
+In all experiments, we consider a FL scenario with 100 clients. Each local model update on a client is trained by
+
+5 epochs using the SGD optimizer, with a learning rate of   
+0.01 and momentum of 0.5.
+
+Data heterogeneity: We use a Dirichlet distribution to sample client datasets with different label distributions (Hsu and Brown. 2019), and use a tunable parameter $( \alpha )$ to adjust the amount of data heterogeneity: as shown in Figure 7, the smaller $\alpha$ is, the more biased these label distributions will be and the amount of data heterogeneity is higher. When $\alpha$ is very small, each client only has data samples of few classes.
+
+6435 89 0 · Client id3456 643527 g . .   
+12 8 8 9 9   
+0   
+0.2 0.4 0.6 0.8 0.2 0.4 0.6 0.8   
+Proportion of data in each class Proportion of data in each class (a) α = 0.01 (b) α = 1
+
+Device heterogeneity: To intertwine device heterogeneity with data heterogeneity, we select one data class to be affected by staleness, and apply different amounts of staleness, measured by the number of epochs that clients’ model updates are delayed, to the top 10 clients whose local datasets contain the most data samples of the selected data class. The impact of staleness can be further enlarged by applying staleness in the similar way to more data classes.
+
+We evaluate the FL performance by assessing the trained model’s accuracy in the selected data class being affected by staleness, and evaluate the FL training time in number of epochs. We expect that our approach can either improve the model accuracy, or achieve the similar accuracy with the baselines but use fewer training epochs.
+
+# FL Performance in the Fixed Data Scenario
+
+In the fixed data scenario, 3 standard datasets and 1 domainspecific dataset are used in evaluations:
+
+• Using MNIST (LeCun and Burges. 2010) and FMNIST (Xiao, Rasul, and Vollgraf 2017) datasets to train a LeNet model, and data class 5 is affected by staleness; • Using CIFAR-10 (Krizhevsky 2009) dataset to train a ResNet-18 model, data class 2 is affected by staleness; • Using a disaster image dataset MDI (Mouzannar, Rizk, and Awad 2018) to fine-tune the ResNet-18 model pretrained with ImageNet.
+
+The trained model’s accuracies4 using different FL schemes, with the amount of staleness as 40 epochs, are listed in Table 9. The training progresses of 1st-Order and W-Pred closely resemble that of Unweighted aggregation, suggesting that estimating stale model updates with the Taylor expansion is ineffective under unlimited staleness. Similarly, Weighted aggregation will lead to a biased model with much lower accuracy. In contrast, our gradient inversion based compensation can improve the trained model’s accuracy by at least $4 \%$ , compared to the best baseline. Such advantage in model accuracy can be as large as $2 5 \%$ when compared with Weighted aggregation. Besides image data, our method is also applicable to other data modalities such as text and time-series data. Results and discussions on these modalities with large real-world datasets are in Appendix A.
+
+Table 9: Accuracy of the trained model with different datasets in the fixed data scenario   
+
+<html><body><table><tr><td>Accuracy(%)</td><td>MNIST</td><td>FMNIST</td><td>CIFAR10</td><td>MDI</td></tr><tr><td>Unweighted Weighted 1st-Order</td><td>57.4 39.2 57.4</td><td>49.2 30.1 49.3</td><td>22.8 12.6 22.6</td><td>72.3 61.2 72.3</td></tr></table></body></html>
+
+0.6 0.3 0.24 Ours 以 Ours Unstale Unstale Unweighted Unweighted Weighted 0.1 Weighted 1st-Order 1st-Order W-pred W-pred 0.0 Asyn-Tiers 0.0 Asyn-Tiers 0 200 400 600 800 1000 500 1000 1500 2000 2500 Epoch Epoch (a) MNIST, LeNet (b) CIFAR-10, ResNet18
+
+Figure 8 further show the FL training procedure over different epochs, and demonstrated that our method can also improve the progress and stability of training. Furthermore, we conducted experiments with different amounts of data and device heterogeneity. Results in Tables 10 and 11 show that5, compared with the baselines, our method can generally achieve higher model accuracy or reach the same accuracy with fewer training epochs, especially when the amount of staleness is large or the amount of data heterogeneity is high. We also use other large-scale real-world dataset to conduct experiments and results are in Appendix C.
+
+# FL Performance in the Variant Data Scenario
+
+To continuously vary the global data distributions, we use two public datasets, namely MNIST and SVHN (Netzer 2011), which are for the same learning task but with different feature representations. Each client’s local dataset is initialized as the MNIST dataset in the same way as in the fixed data scenario. Afterwards, during training, each client con
+
+<html><body><table><tr><td>α</td><td colspan="2">1</td><td colspan="2">0.1</td><td colspan="2">0.01</td></tr><tr><td></td><td>Acc</td><td>Time</td><td>Acc</td><td>Time</td><td>Acc</td><td>Time</td></tr><tr><td>Unweighted Weighted 1st-Order</td><td>82.3 82.4 82.5</td><td>100 102</td><td>57.4 39.2</td><td>128 171</td><td>51.1 31.1</td><td>132 179</td></tr></table></body></html>
+
+Table 10: Model accuracy and percentage of training epochs being saved, with different amounts of data heterogeneity controlled by $\alpha$ in the Dirichlet distribution. The MNIST dataset and LeNet model are used.
+
+Table 11: Model accuracy and percentage of training epochs being saved, with different amounts of staleness measured in the number of delayed epochs.   
+
+<html><body><table><tr><td>Staleness</td><td colspan="2">10</td><td colspan="2">40</td><td colspan="2">100</td></tr><tr><td></td><td>Acc</td><td>Time</td><td>Acc</td><td>Time</td><td>Acc</td><td>Time</td></tr><tr><td>Unweighted</td><td>72.6</td><td>104</td><td>57.4</td><td>128</td><td>41.5</td><td>142</td></tr><tr><td>Weighted</td><td>69.4</td><td>115</td><td>39.2</td><td>171</td><td>30.5</td><td>179</td></tr><tr><td>1st-Order</td><td>72.6</td><td>104</td><td>57.3</td><td>129</td><td>41.8</td><td>141</td></tr><tr><td>W-Pred</td><td>72.6</td><td>104</td><td>57.6</td><td>126</td><td>41.7</td><td>142</td></tr><tr><td>Asyn-tiers</td><td>72.7</td><td>103</td><td>57.6</td><td>126</td><td>38.3</td><td>138</td></tr><tr><td>Ours</td><td>73.3</td><td>100</td><td>61.2</td><td>100</td><td>47.2</td><td>100</td></tr></table></body></html>
+
+tinuously replaces random data samples in its local dataset with new data samples in the SVHN dataset.
+
+Unstale 0.6 Ours 0.5 UWneiwgehitgehdted   
+0.4 1st-Order   
+a W-pred   
+0.3 Asyn-Tiers   
+C   
+0.2 0. 200 300 400 500 600 700 800 Epoch
+
+Experiment results in Figure 9 show that in such variant data scenario, since clients’ local data distributions continuously change, the FL training will never converge. Hence, the model accuracy achieved by the existing FL schemes exhibited significant fluctuations over time and stayed low $( < 4 0 \% )$ . In comparison, our technique can better depict the variant data patterns and hence achieve much higher model accuracy, which is comparable to FL without staleness and $20 \%$ higher than those in existing FL schemes.
+
+We also conducted experiments with different amounts of staleness and different rates of data distributions’ variations. Results in Tables 12 and 13 showed that our method outperformed the baselines with different amounts of staleness.
+
+# Related Work
+
+Most existing solutions to staleness in FL are based on weighted aggregation (Chen and Jin. 2019; Wang 2022;
+
+Table 12: Model accuracy and the number of training epochs reduced, with different amounts of staleness measured in the number of delayed epochs   
+
+<html><body><table><tr><td>Staleness</td><td colspan="2">10</td><td colspan="2">40</td><td colspan="2">100</td></tr><tr><td></td><td>Acc</td><td>Time</td><td>Acc 53.2</td><td>Time</td><td>Acc 39.1</td><td>Time</td></tr><tr><td>Unweighted Weighted 1st-Order W-Pred Asyn-tiers Ours</td><td>60.6 59.8 60.6 60.4 58.2 63.3</td><td>99 109 100 100 103 100</td><td>38.9 53.6 53.3 46.9 62.5</td><td>117 153 117 117 118 100</td><td>21.8 40.0 39.1 35.7 61.0 100</td><td>131 166 133 131 137</td></tr></table></body></html>
+
+Table 13: Model accuracy and the number of training epochs reduced, with different rates of data distributions’ variations measured by number of samples changed per epoch   
+
+<html><body><table><tr><td>Rate</td><td colspan="2">0.5</td><td colspan="2">1</td><td colspan="2">2</td></tr><tr><td></td><td>Acc</td><td>Time</td><td>Acc</td><td>Time</td><td>Acc</td><td>Time</td></tr><tr><td>Unweighted</td><td>73.1</td><td>100</td><td>39.1</td><td>131</td><td>44.1</td><td>127</td></tr><tr><td>Weighted</td><td>58.2</td><td>102</td><td>21.8</td><td>166</td><td>25.2</td><td>163</td></tr><tr><td>1st-Order</td><td>73.2</td><td>100</td><td>40.0</td><td>133</td><td>43.9</td><td>127</td></tr><tr><td>W-Pred</td><td>73.1</td><td>101</td><td>39.0</td><td>131</td><td>39.5</td><td>127</td></tr><tr><td>Asyn-tiers</td><td>68.3</td><td>98</td><td>35.7</td><td>137</td><td>39.1</td><td>130</td></tr><tr><td>Ours</td><td>70.3</td><td>100</td><td>60.1</td><td>100</td><td>63.3</td><td>100</td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr></table></body></html>
+
+Chen 2020). These existing solutions are biased towards fast clients, and will affect the trained model’s accuracy when data and device heterogeneities in FL are intertwined. Other researchers suggest to use semi-asynchronous FL, where the server aggregates client model updates at a lower frequency (Nguyen 2022) or clusters clients into different asynchronous “tiers” according to their update rates (Chai 2021). However, doing so cannot completely eliminate the impact of intertwined data and device heterogeneities, because the server’s aggregation still involves stale model updates.
+
+Instead, we can transfer knowledge from stale model updates to the global model, by training a generative model and compelling its generated data to exhibit high predictive values on the original model updates (Ye 2020; Lopes, Fenu, and Starner 2017; Zhu, Hong, and Zhou 2021). Another approach is to optimize randomly initialized input data until it has good performance on the original model (YYin 2020). However, the quality and accuracy of knowledge transfer in these methods remains low, and we provided more detailed experiment results in Appendix C to demonstrate such low quality. Other efforts enhance the quality of knowledge transfer by incorporating natural image priors (Luo 2020) or using another public dataset to introduce general knowledge (Yang 2019), but require extra datasets. Moreover, all these methods require that the clients’ local models to be fully trained, which is usually infeasible in FL.
+
+# Conclusion
+
+In this paper, we present a new FL framework to tackle intertwined data and device heterogeneities in FL, by using gradient inversion to estimate clients’ unstale model updates. Experiments show that our technique largely improves model accuracy and reduces the amount of training epochs needed.
+
+# Acknowledgments
+
+We thank the anonymous reviewers for their comments and feedback. This work was supported in part by National Science Foundation (NSF) under grant number IIS-2205360, CCF-2217003, CCF-2215042, and National Institutes of Health (NIH) under grant number R01HL170368.

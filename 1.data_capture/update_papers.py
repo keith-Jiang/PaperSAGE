@@ -5,13 +5,13 @@ from pathlib import Path
 import logging
 import sys
 import re
-
+# 从三天内的找，是否有重复
 # --- 1. 配置区 ---
 CATEGORIES = [
     "cs.AI", "cs.LG", "cs.CV", "cs.CL", "cs.RO", 
     "cs.NE", "cs.IR", "cs.DC", "cs.AR", "cs.CR"
 ]
-MAX_PAPERS = 20
+MAX_PAPERS = 50
 now = datetime.now()
 formatted_date = now.strftime("%Y%m%d")
 PAPERS_DIR = Path(f"./origin_papers/{formatted_date}")
@@ -58,6 +58,7 @@ def download_paper(paper, output_dir):
     # get_short_id() 方法返回格式如 '2103.17239' 的ID，不包含版本号
     # ArXiv ID 本身就是安全的文件名，无需清理
     arxiv_id = paper.get_short_id()
+    arxiv_id = arxiv_id.split('v')[0]  # 移除版本后缀
     pdf_filename = f"{arxiv_id}.pdf"
     
     pdf_path = output_dir / pdf_filename

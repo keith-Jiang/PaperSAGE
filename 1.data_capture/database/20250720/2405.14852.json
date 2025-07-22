@@ -13,7 +13,14 @@
         "Peter Richtárik"
     ],
     "institutions": [
-        "KAUST"
+        "Yandex",
+        "HSE University",
+        "MIPT",
+        "SberDevices",
+        "AI Initiative, KAUST",
+        "Skoltech",
+        "IST Austria",
+        "NeuralMagic"
     ],
     "publication_date": "2024-05-23",
     "venue": "Neural Information Processing Systems",

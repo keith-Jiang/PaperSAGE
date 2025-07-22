@@ -1,0 +1,208 @@
+# WHALE-FL: Wireless and Heterogeneity Aware Latency Efficient Federated Learning over Mobile Devices via Adaptive Subnetwork Scheduling
+
+Huai-an $\mathbf { S u } ^ { 1 \ast }$ , Jiaxiang $\mathbf { G e n g } ^ { 2 ^ { * } }$ , Liang $\mathbf { L i } ^ { 3 }$ , Xiaoqi $\mathbf { Q } \mathbf { i n } ^ { 2 }$ , Yanzhao $\mathbf { H o u } ^ { 2 }$ , Hao Wang4, Xin $\mathbf { F u } ^ { 1 }$ , Miao Pan1
+
+1Department of Electrical and Computer Engineering, University of Houston 2School of Information and Communication Engineering, Beijing University of Posts and Telecommunications 3Frontier Research Center, Peng Cheng Laboratory 4 Department of Electrical and Computer Engineering, Stevens Institute of Technology {hsu3, xfu8, mpan2}@uh.edu, {lelegjx, xiaoqiqin, houyanzhao}@bupt.edu.cn, $\operatorname* { l i l } 0 3 @$ pcl.ac.cn, hwang9@stevens.edu
+
+# Abstract
+
+As a popular distributed learning paradigm, federated learning (FL) over mobile devices fosters numerous applications, while their practical deployment is hindered by participating devices’ computing and communication heterogeneity. Some pioneering research efforts proposed to extract subnetworks from the global model, and assign as large a subnetwork as possible to the device for local training based on its full computing capacity. Although such fixed size subnetwork assignment enables FL training over heterogeneous mobile devices, it is unaware of (i) the dynamic changes of devices’ communication and computing conditions and (ii) FL training progress and its dynamic requirements of local training contributions, both of which may cause very long FL training delay. Motivated by those dynamics, in this paper, we develop a wireless and heterogeneity aware latency efficient FL (WHALE-FL) approach to accelerate FL training through adaptive subnetwork scheduling. Instead of sticking to the fixed size subnetwork, WHALE-FL introduces a novel subnetwork selection utility function to capture device and FL training dynamics, and guides the mobile device to adaptively select the subnetwork size for local training based on (a) its computing and communication capacity, (b) its dynamic computing and/or communication conditions, and (c) FL training status and its corresponding requirements for local training contributions. Our evaluation shows that, compared with peer designs, WHALE-FL effectively accelerates FL training without sacrificing learning accuracy.
+
+# Introduction
+
+Federated Learning (FL) (McMahan et al. 2017) recently experienced a notable evolution, expanding its scope from conventional data center environments to harness the potential of mobile devices (Li et al. 2021a; Chen et al. 2023). This shift has been propelled by the continuous advancements in hardware, empowering mobile devices like the NVIDIA Xavier, iPhone 16, etc. with increasingly robust on-device computing capabilities tailored for local training. With the collective intelligence of edge devices and FL’s fundamental principle of preserving data privacy, FL over mobile devices has paved the way for a diverse spectrum of innovative mobile applications, including keyboard predictions (Hard et al.
+
+2018), smart home hazard detection (Yu et al. 2020), health event detection (Brisimi et al. 2018), and so on.
+
+While FL over mobile device has great potentials, its practical deployment faces significant challenges due to the inherent heterogeneity among real-world mobile devices, varying in computing capability, wireless conditions and local data distribution (Lai et al. 2021). Existing FL studies often assume the model-homogeneous setting, where global and local models share identical architectures across all clients. However, as devices are forced to train models within their individual capability, developers have to choose between excluding low-tier devices, introducing training bias (Bickel, Hammel, and O’Connell 1975), or maintaining a low-complexity global model to accommodate all clients, resulting in degraded accuracy (Cho, Wang, and Joshi 2021; Ye et al. 2020). The trend towards large models like Transformers (Liu et al. 2023) exacerbates the issue, hindering their training on mobile devices. Furthermore, unlike GPU clusters with stable high-speed Internet connections, mobile devices’ computing resources are constrained and heterogeneous, and their wireless transmissions are relatively slow and dynamic, both of which lead to huge latency in FL training (Chen et al. 2022) and may severely degrade the performance of associated applications.
+
+To address the limitations of model-homogeneous FL, researchers have recently studied how to train different sized models across heterogeneous mobile clients and corresponding global model aggregation in FL training. Subnetwork training, exemplified by pioneering approaches like widthbased subnetwork generation in Federated Dropout (Wen, Jeon, and Huang 2021) and HeteroFL (Diao, Ding, and Tarokh 2021), and depth-based generation in DepthFL (Kim et al. 2023), has proven effective by enabling mobile devices to train smaller subnetworks derived from the large global server model. These designs also offer solutions to aggregating diverse devices’ subnetworks. By tailoring subnetwork architecture for the individual device, subnetwork training can ensure compatibility with mobile devices owning heterogeneous computing and communication capabilities. However, a prevalent challenge in current subnetwork approaches lies in their static fixed-size subnetwork assignment policy. Such a policy may fail to unleash the full potential of subnetwork based training, mainly due to the unawareness of system dynamics (i.e., computing and communications dynamics) and FL training dynamics.
+
+System dynamics encompass the time-varying computing loads of devices’ background applications and the fluctuating wireless communication conditions across FL training rounds, which affects the sizes of subnetworks that a mobile device can support over rounds. Since most modern mobile devices (e.g., smartphones) participating in FL training have the ability to run multiple tasks simultaneously (Banabilah et al. 2022), the dynamic orchestration of CPU/GPU resources across these concurrent activities results in the fluctuations in computing power and available memory for FL tasks, consequently impacting the supported subnetwork sizes for on-device computing. Similarly, wireless communications dynamics caused by users’ mobility, wireless channel fading, etc. lead to dynamic transmission rates, which directly affect candidate subnework sizes that a mobile device can support for local model updates.
+
+FL training dynamics represents FL convergence’s dynamic requirements for the contributions from local training at different training stages, which implicitly affects participating devices’ selections on subnetwork sizes. Recent studies have revealed that critical learning periods (CLP) exist in the training process of deep neural networks (Achille, Rovere, and Soatto 2018; Yan, Wang, and Li 2022). As the FL training proceeds, the training contributions from each client gradually decrease. Thus, it is crucial to assign suitable subnetwork sizes to clients based on FL training dynamics.
+
+We observe that failing to capture system or training dynamics and always using the possible largest-sized subnetworks under devices’ full capabilities may significantly prolong the FL training process. Different from prior static fixed-size subnetwork assignment methods, in this paper, we propose a wireless and heterogeneity aware latency efficient FL (WHALE-FL) approach to accelerate FL training via adaptive width-wise subnetwork scheduling. WHALE-FL characterizes system dynamics and FL training dynamics and tailors appropriate-sized subnetworks for heterogeneous mobile devices under dynamic computing/wireless environments at different FL training stages. As far as we know, WHALE-FL is the first paper that converts static fixedsize subnetwork allocation, e.g., HeteroFL (Diao, Ding, and Tarokh 2021), Federated Dropout (Wen, Jeon, and Huang 2021), etc., into adaptive subnetwork scheduling for each device by jointly considering system heterogeneity and FL training dynamics, and conducts system-level experiments for validation. Our salient contributions are summarized as follows:
+
+• We design a novel subnetwork selection utility function to capture system and FL training dynamics, guiding mobile devices to adaptively size their subnetworks for local training based on the time-varying computing/communication capacity and FL training status. • We develop a WHALE-FL prototype and evaluate its performance with extensive experiments. The experimental results validate that WHALE-FL can remarkably reduce the latency for FL training over heterogeneous mobile devices without sacrificing learning accuracy.
+
+# Preliminary FL over Heterogeneous Mobile Devices
+
+Consider that $M$ mobile devices in a wireless network collaboratively engage in FL to train a deep neural network on locally distributed datasets $\{ L _ { 1 } , \cdot \cdot \cdot , L _ { i } , \cdot \cdot \cdot , L _ { M } \}$ . Their local models are parameterized by $\{ W _ { 1 } , \cdot \cdot \cdot , W _ { i } , \cdot \cdot \cdot , W _ { M } \}$ , which are updated using stochastic gradient descents (Ruder 2016) on the local data samples through local training. The server collects the local model updates and aggregates them into a global model $W _ { g }$ using model averaging (McMahan et al. 2017; Li et al. 2020). This aggregation occurs over multiple communication rounds, with the global model at the $r$ -th round denoted $\begin{array} { r } { W _ { g } ^ { r } = \frac { 1 } { M } \sum _ { m = 1 } ^ { M } \bar { W } _ { m } ^ { r } } \end{array}$ . lIen dtheev scuesb,seaqnudetnhtetiralioncianlgmroudnelds, $\boldsymbol { W } _ { g } ^ { r }$ are updated as $\begin{array} { r } { W _ { i } ^ { r + 1 } = W _ { g } ^ { r } } \end{array}$ . This process repeats until FL converges, while system heterogeneity (communications and computing) among mobile devices incurs huge training latency and significantly slows down FL convergence.
+
+# FL with Subnetwork Extraction
+
+To address the system heterogeneity issue in FL training, the subnetwork training method was introduced in (Diao, Ding, and Tarokh 2021), which extracts subnetworks in different sizes from the global model.
+
+Let ${ \mathcal W } ^ { P } = \{ W ^ { 1 } , W ^ { 2 } , \cdots , W ^ { p } , \cdots , W ^ { P } \}$ be a collection of candidate subnetworks to be selected by mobile devices for local training, where $P$ complexity/size levels are considered. A lower size level $p$ corresponds to a largersized subnetwork, and $W ^ { P }$ is the smallest subnetwork for selection, i.e., $W ^ { P } \subset W ^ { P - 1 } \subset \cdots \subset W ^ { 1 }$ . We follow the same approach as illustrated in (Diao, Ding, and Tarokh 2021) to extract subnetworks from the global model by shrinking the width of hidden channel with specific ratios. Let $s \in \mathsf { \bar { ( 0 , 1 ] } }$ be the hidden channel shrinkage ratio. Then, we have $| W ^ { \bar { p } } | / | W _ { g } | = | W ^ { p } | / | W ^ { 1 } | = s ^ { 2 ( p - 1 ) }$ . With this construction, different sized subnetworks can be assigned to participating mobile devices according to their corresponding capabilities. Suppose that the number of devices in each subnetwork size level is $\{ M _ { 1 } , \cdot \cdot \cdot , M _ { P } \}$ . The server has to aggregate the heterogeneous subnetworks in every training round. As demonstrated in (Diao, Ding, and Tarokh 2021), the global aggregation is conducted as follows.
+
+$$
+\begin{array} { r l } & { { \cal W } _ { g } = { \cal W } _ { g } ^ { 1 } = { \cal W } _ { g } ^ { P } \cup ( { \cal W } _ { g } ^ { P - 1 } \backslash { \cal W } _ { g } ^ { P } ) \cup \dots \cup ( { \cal W } _ { g } ^ { 1 } \backslash { \cal W } _ { g } ^ { 2 } ) } \\ & { \qquad = { \cal W } _ { g } ^ { P } \cup \displaystyle \bigcup _ { p = 2 } ^ { P } { \cal W } _ { g } ^ { p - 1 } \setminus { \cal W } _ { g } ^ { p } , } \end{array}
+$$
+
+where
+
+$$
+\begin{array} { l } { \displaystyle { W _ { g } ^ { P } = \frac { 1 } { M } \sum _ { m = 1 } ^ { M } W _ { m } ^ { P } } , } \\ { \displaystyle { W _ { g } ^ { p - 1 } \backslash W _ { g } ^ { p } = \frac { 1 } { M - M _ { p ; P } } \sum _ { m = 1 } ^ { M - M _ { p ; P } } W _ { m } ^ { p - 1 } \backslash W _ { m } ^ { p } , \forall p \in [ 2 , P ] . } } \end{array}
+$$
+
+In this way, each parameter is averaged from those devices whose assigned subnetwork contains that specific parameter, which enables the global aggregation and $\mathrm { F L }$ training with different sizes of subnetworks. Although the subnetwork method in (Diao, Ding, and Tarokh 2021) alleviates the system heterogeneity issue, it is a fixed policy. It cannot capture the dynamic changes of wireless transmission/ondevice computing conditions, or the dynamic requirements of contributions from local training at different FL training stages, either of which may result in a huge training latency.
+
+# Fisher Information
+
+Fisher information is utilized as a measurement of how much a change in weights can affect the output of neural networks (Achille, Rovere, and Soatto 2018). Fisher information is a 2nd-order approximation of the Hessian of the loss function (Amari and Nagaoka 2000; Martens 2014), providing information on the curvature of the loss landscape near the current weights. Such characteristics help to indicate how fast the gradient changes during training, which may be used to characterize the training dynamics from local device side and further help clients decide how to adjust their subnetwork sizes.
+
+To enable distributed subnetwork scheduling, we use the Federated Fisher Information Matrix (FedFIM) from (Yan, Wang, and Li 2022) instead of the traditional definition of the Fisher Information Matrix (FIM) for centralized training to avoid requiring access to the entire dataset. That is, given that training data resides in each client, the local FIM on client $i$ in the $r$ -th training round is calculated by
+
+$$
+\begin{array} { r } { F I _ { i , r } = \mathbb { E } _ { x _ { i } \sim \mathcal { X } _ { i } } \mathbb { E } _ { \hat { y } \sim p _ { W } ( \hat { y } _ { i } \mid x _ { i } ) } \big [ \bigtriangledown ( x _ { i } , \hat { y } _ { i } ) \bigtriangledown ( x _ { i } , \hat { y } _ { i } ) ^ { \intercal } \big ] , } \end{array}
+$$
+
+where $x _ { i }$ is the input data of and $y _ { i }$ is the corresponding output label of client $i , W$ is the weight and $p _ { W } ( \bar { \hat { y } } _ { i } | x _ { i } )$ is the approximate posterior distribution. $\mathcal { X } _ { i }$ is the empirical distribution of the $i$ -th client’s local data. The corresponding gradient of the loss for $( x , y )$ is denoted as $\nabla ( x , y ) =$ $\textstyle { \frac { \partial } { \partial W } } \ell ( x , y ; W )$ ,isatnridb $\hat { y _ { i } }$ iiosnafroallnodwoimngv .er than a true $p _ { W } ( \hat { y } _ { i } | x _ { i } )$
+
+# Motivation
+
+Unawareness of system dynamics. Traditional subnetwork assignment (e.g., HeteroFL (Diao, Ding, and Tarokh 2021)) is fixed, which is based on the participating mobile device’s maximum system capability (i.e., computing $^ +$ communications), while ignoring the dynamic changes of the device’s computing and communication conditions. Such an unawareness may lead to poor subnetwork assignment decisions and significantly delay the FL training process. For instance, a mobile device capable of computing a fullsized model may be experiencing poor wireless access (e.g., 4G/LTE) or running some computing-intensive background applications (e.g., GPU-intensive gaming) in a certain training round. In this case, the fixed full-sized subnetwork assignment may make this device a straggler and cause a big latency in FL training. Thus, an adaptive subnetwork scheduling aware of system (computing $^ +$ communication) dynamics is in need.
+
+Unawareness of FL training dynamics. The fixed subnetwork assignment is unaware of FL training progress and its dynamic requirements of learning contributions from local mobile devices. Since FL training starts from scratch, any contributions from any device’s local training will be helpful. Using small-sized subnetworks can expedite on-device computing and wireless transmissions of local model updates. As FL training proceeds into the CLP, more accurate local model updates are needed for the global training model to converge. When FL training is close to convergence (i.e., the late stage), most mobile devices have already made substantial contributions to the global model. For those devices, sticking to large or full-sized subnetworks for local training offers limited learning benefits for FL convergence, while some computing/communications-constrained devices may incur significant training latency or even become stragglers. Therefore, it is necessary to develop an adaptive subnetwork scheduling method that captures FL training dynamics, recognizes computing/communication constraints, and selects appropriately sized subnetworks for local training, to improve delay efficiency in FL training over mobile devices.
+
+# WHALE-FL Design
+
+Aiming to reduce FL training latency, WHALE-FL entitles mobile devices to distributedly schedule different sizes of subnetworks for local training, adapting to their system dynamics and FL training dynamics. To capture those dynamics, WHALE-FL presents a novel adaptive subnetwork selection utility function jointly considering system efficiency and FL training efficiency. Moreover, WHALE-FL provides a normalization procedure to convert the calculated subnetwork selection utility values to discrete size levels of subnetowrks for mobile devices’ local scheduling decisions.
+
+# Adaptive Subnetwork Selection Utility
+
+WHALE-FL’s adaptive subnetwork selection performance hinges on two critical aspects: system efficiency and training efficiency. System efficiency encompasses the duration of each training round, including local computing and model uploading time consumption. Training efficiency gauges the local training’s contributions to global convergence. The fluctuating wireless conditions and available computing resources of devices, as well as their training progress with local data, collectively determine the system and training efficiency, forming what we term as adaptive subnetwork selection utility.
+
+To accelerate FL training without sacrificing learning accuracy, it is critical to trade-off system and training efficiencies to select the appropriate subnetwork size for individual device’s local training per round. Briefly, WHALEFL favors system efficiency over training efficiency at the early stage of FL training, and tends to schedule small-sized subnetworks for devices’ local training. While FL training steps into the middle stage, if more accurate local training is needed for FL convergence, WHALE-FL prefers training efficiency to system efficiency and schedules to adaptively increase the size of subnetworks for participating mobile devices. Otherwise, WHALE-FL prioritizes system efficiency over training efficiency. When FL is close to convergence, WHALE-FL jointly considers system and training efficiencies, and gradually decreases the size of subnetworks for local training, given the fact that most devices have contributed enough to the global model and it is unnecessary to keep large-sized subnetworks for local training.
+
+System efficiency utility. We define the system efficiency $( S E _ { i , r } )$ for any given client $\mathbf { \chi } _ { i }$ in the $r$ -th round based on its wireless transmission rate and available computing resources at that time, which is calculated as follows:
+
+$$
+S E _ { i , r } = \frac { T } { T _ { i , r } ^ { t r } + T _ { i , r } ^ { c o } } ,
+$$
+
+where $T _ { i , r } ^ { t r }$ and $T _ { i , r } ^ { c o }$ are the transmission delay and the computing delay, respectively, for the unit/smallest subnetwork. $T$ is the developer-preferred duration of each round, which may vary for different $\mathrm { F L }$ tasks. We assume that the wireless transmission rates and available computing resources dynamically change over rounds, but are relatively stable within a FL training round. Thus, given a learning task, transmission and computing workloads for the unit subnetwork are fixed, and $T _ { i , r } ^ { t r }$ and $T _ { i , r } ^ { c o }$ can be easily estimated for device $i$ in the $r$ -th round. A higher $S E _ { i , r }$ enables devices to opt for larger subnetwork sizes for local training within this round, and vice versa. The formulation in Eqn. (4) comprehensively covers the system efficiency for communication delay dominant cases (i.e., slow transmissions $\&$ fast computing), computing delay dominant cases (i.e., fast transmissions & slow computing), and communication-computing comparable cases.
+
+Training efficiency utility. By employing fisher information $F I$ , we define the training efficiency utility $T E _ { i , r }$ for device $i$ in the $r$ -th round as follows:
+
+$$
+T E _ { i , r } = | \mathbf { B } _ { i } | \sqrt { \frac { 1 } { | \mathbf { B } _ { i } | } \sum _ { k \in \mathbf { B } _ { i } } \sum _ { d \in \mathbf { D } } \frac { F I _ { i , r - d } ( k ) ^ { 2 } } { | \mathbf { D } | } } ,
+$$
+
+where $B _ { i }$ represents the batched datasets for device $i$ . Here, we utilize a window-averaged local Fisher information to measure the dynamic utility during training with $\mathbf { D } = \{ 1 , . . , d , . . , D \}$ as the set of window sizes. Here, the sliding window operation helps to prevent frequent zigzag changes in subnetwork sizes, as Fisher information across different local training iterations within the $i$ -th round may be highly unstable, and directly using the Fisher information of each iteration could result in unstable subnetwork selection strategies (Achille, Rovere, and Soatto 2018).
+
+Adaptive subnetwork selection utility function. WHALEFL trades-off the system and training efficiencies to determine the utility values for subnetwork scheduling over rounds. The adaptive subnetwork selection utility function is shown in Eqn. (6), where $\boldsymbol { U } t i l ( i , \boldsymbol { r } )$ associates system and training efficiencies with developer-specified factor $\beta$ . Aware of both system and $\mathrm { F L }$ training dynamics, a large/small value of $\boldsymbol { U } t i l ( i , r )$ suggests that device $\mathbf { \chi } _ { i }$ should opt for a large/small sized subnetwork in the subsequent $r$ -th round.
+
+$$
+\begin{array} { r l r } & { U t i l ( i , r ) = } & \\ & { | \mathbf { B } _ { i } | \sqrt { \displaystyle \frac { 1 } { | \mathbf { B } _ { i } | } \sum _ { k \in \mathbf { B } _ { i } } \sum _ { d \in \mathbf { D } } \frac { F I _ { i , r - d } ( k ) ^ { 2 } } { | \mathbf { D } | } } \times \underbrace { \left( \frac { T } { T _ { i , r } ^ { t r } + T _ { i , r } ^ { c o } } \right) ^ { \beta } } _ { \displaystyle \left. \frac { t r } { T _ { i , r } ^ { t r } + T _ { i , r } ^ { c o } } \right. ^ { 2 } } . } \end{array}
+$$
+
+# Utility Value to Subnetwork Size Conversion
+
+The calculated utility in Eqn. (6) cannot directly be used by individual mobile devices to decide their subnetwork size selection. To facilitate mobile devices’ decisions, it is necessary to convert subnetwork selection utility values into available/candidate subnetwork sizes.
+
+Given the definitions above, the next step is to normalize devices’ utility values into the range of $[ 0 , 1 ]$ , in order to identify the model shrinkage ratio. We propose to use a piecewise linear function to normalize $\boldsymbol { U } t i l ( i , r )$ into $U _ { n } ( i , \bar { r } )$ as follows.
+
+$$
+\begin{array} { r } { U _ { n } ( i , r ) = \left\{ \begin{array} { l l } { \frac { U t i l ( i , r ) } { U _ { t h } } , } & { U t i l ( i , r ) \le U _ { t h } , } \\ { 1 , } & { \mathrm { o t h e r w i s e } , } \end{array} \right. } \end{array}
+$$
+
+where $U _ { t h }$ is a configurable threshold that represents the utility level at which the full-sized model should be adopted.
+
+After the utility value normalization, device $i$ selects its subnetwork for the $r$ -th round local training by
+
+$$
+W ( i , r ) = \left\{ \begin{array} { l l } { \hat { W } ( i , r ) , } & { \mathbf { i f } | W _ { i } ^ { m a x } | > | \hat { W } ( i , r ) | ; } \\ { W _ { i } ^ { m a x } , } & { \mathbf { i f } | W _ { i } ^ { m a x } | \leq | \hat { W } ( i , r ) | . } \end{array} \right.
+$$
+
+Here, $| W _ { i } ^ { m a x } |$ denotes the maximum subnetwork size that device $i$ can support with its full computing capacity, where $W _ { i } ^ { m a x } ~ \in ~ \mathcal { W } ^ { P }$ as defined in Sec. . $\hat { W } ( i , r ) ~ \in ~ \mathcal { W } ^ { P }$ is a subnetwork derived from normalized utility value $U _ { n } ( i , r )$ , which can be expressed as
+
+$$
+\begin{array} { r } { \hat { W } ( i , r ) = \left\{ \begin{array} { l l } { W ^ { 1 } , } & { \mathbf { i f } U _ { n } ( i , r ) \geq \frac { ( P - 1 ) } { P } ; } \\ { W ^ { 2 } , } & { \mathbf { i f } U _ { n } ( i , r ) \in [ \frac { ( P - 2 ) } { P } , \frac { ( P - 1 ) } { P } ) ; } \\ { \dots \cdot , } & { \dots \cdot } \\ { W ^ { p } , } & { \mathbf { i f } U _ { n } ( i , r ) \in [ \frac { ( P - p ) } { P } , \frac { ( P - p + 1 ) } { P } ) ; } \\ { \dots \cdot , } & { \dots \cdot } \\ { W ^ { P } , } & { \mathbf { i f } U _ { n } ( i , r ) < \frac { 1 } { P } , } \end{array} \right. } \end{array}
+$$
+
+where $| W ^ { p } | / | W _ { g } | = s ^ { 2 ( p - 1 ) } , \forall W ^ { p } \in \mathcal { W } ^ { P }$ .
+
+Then, mobile devices conduct local computing according to their selected subnetworks, respectively, followed by transmitting local model updates to the $\mathrm { F L }$ server. Following the same aggregation method in (Diao, Ding, and Tarokh 2021), the FL server aggregates updated local models with heterogeneous subnetworks and updates the global model as
+
+$$
+W ( g , r + 1 ) = W _ { g } ^ { P , r + 1 } \cup \bigcup _ { p = 2 } ^ { P } W _ { g } ^ { p - 1 , r + 1 } \setminus W _ { g } ^ { p , r + 1 } .
+$$
+
+In summary, during FL training, mobile devices collect their local information at runtime, including up-link channel quality, background computational loads, memory usage, training loss, etc. Based on the collected information, at the beginning of the $r$ -th training round, each device leverages Eqn. (6) to trade-off system efficiency and training efficiency, and calculates its adaptive subnetwork selection utility value $\boldsymbol { U } t i l ( i , r )$ . The utility value is then normalized into $U _ { n } ( i , r )$ . Device $i$ uses $U _ { n } ( i , r )$ to determine the subnetwork size and select an appropriate subnetwork for its local training according to Eqn. (8) and Eqn. (9). After that, FL server aggregates locally trained subnetworks with different sizes and updates the global model for the next round training. In the appendix, we provide the convergence analysis for WHALE-FL based on (Wang et al. 2023), and show that WHALE-FL can converge under adaptive subnetwork size scheduling.
+
+# Experimental Setup WHALE-FL Testbed
+
+The testbed consists of an FL aggregator and a set of heterogeneous mobile devices as FL clients. A NVIDIA RTX 3090 serves as the FL server, whose memory capacity is 24 GB. For heterogeneous FL clients, we have incorporated 5 types of mobile devices, i.e., MacBookPro2018, NVIDIA Jetson Xavier, NVIDIA Jetson TX2, NVDIA Jetson Nano, and Raspberry $\mathrm { P i } 4$ , representing a range of on-device computing capabilities from high to low. The WHALE-FL system involves a total of 20 mobile devices, 4 devices per type. Communication between FL clients and the FL server is facilitated through LTE, BlueTooth, and Wi-Fi 5 transmission environments. The corresponding transmission rates are 80 Mbps (Wi-Fi 5), 20 Mbps (LTE), and 10 Mbps (BlueTooth 3.0), respectively. We set hidden channel shrinkage ratio $s = \textstyle { \frac { 1 } { 2 } }$ and adopt 5 subnetwork size levels. Accord$p = 1 , 2 , \cdots , 5 )$ l asrheri1n, $\textstyle { \frac { 1 } { 4 } } , { \frac { 1 } { 1 6 } } ,$ a $\frac { 1 } { 6 4 }$ ,safnodr $\frac { 1 } { 2 5 6 }$ 5resipzeclteivelsy (i.e.,
+
+# Datasets, Models, Parameters and Baselines
+
+We conduct our experiments with three different FL tasks: image classification, human activity recognition and language modeling. As for the image classification task, we train a CNN on MNIST dataset (Deng 2012) and a ResNet18 on CIFAR10 dataset (He et al. 2015). Human activity recognition involves training a CNN on the HAR dataset (Gupta et al. 2022), and a Transformer is trained on the WikiText2 dataset (Devlin et al. 2019) for the language modeling task. We use the balanced non-IID data partition (Li et al. 2021b). Take the MNIST dataset as an example, the total number of classes is 10. Our default setup is that each device has $\sigma = 2$ classes. We apply a similar non-IID setup to other tasks. The Fisher information’s window size $| \mathbf { D } | = 1 0$ . We employ the following peer designs for performance evaluation: (i) FedAvg (McMahan et al. 2017), where all the clients train with full-sized models; (ii) HeteroFL (Diao, Ding, and Tarokh 2021), where subnetwork assignments are fixed and aligned with clients’ full computation and communication capabilities; (iii) FedDropout (Wen, Jeon, and Huang 2021), which generates subnetworks by choosing the neurons at random; and (iv) FedRolex (Alam et al. 2024), which uses a rolling subnetwork extraction scheme in each FL training round. In particular, we compare the peer design with WHALE-FL’s corresponding extension, i.e., the integration of the peer design and WHALE-FL, e.g., FedRolex vs WHALERolex.
+
+# Evaluation and Analysis Latency Efficiency and Learning Performance
+
+As the results shown in Fig. 1, the proposed WHALEFL consistently achieves remarkable training speedup across various FL tasks without sacrificing learning accuracy. Compared with FedAvg, WHALE-FL accelerates the FL training to the target testing accuracy by approximately $1 . 5 \mathrm { x }$ , $1 . 9 \mathrm { x }$ , $1 . 3 \mathrm { x }$ , and 2.1x for FL tasks including $\mathrm { C N N } @ \mathrm { M N I S T }$ , ResNet18 $@$ CIFAR10, Transformer $@$ WikiText2, and $\mathrm { C N N } @ \mathrm { H A R }$ , respectively. As detailed in Sec. , HeteroFL’s static fixed-size subnetwork assignment policy is not aware of system and training dynamics, which may slow down FL convergence. In contrast, considering both system efficiency and training efficiency, WHALE-FL appropriately assesses the subnetwork selection utility for individual devices and adaptively adjusts the local subnetwork size to suit for time-varying communication and computational conditions and dynamic changing requirements of FL training at different FL training stages, in order to reduce training latency. Consequently, compared with HeteroFL, WHALE-FL achieves a notable speedup of 1.74x, 1.25x, 1.21x and 1.06x for the tested 4 learning tasks, respectively. Results in Tables 1 and 2 further demonstrate that WHALE-FL and WHALE-FL based extensions (i.e., WHALEDropout and WHALERolex) achieve faster convergence and better testing accuracy than the peer designs across different FL tasks.
+
+# Subnetwork Size and Fisher Information Changes
+
+As shown in Fig. 2, across the three heterogeneous devices - MacBookPro 2018 (high-end), NVIDIA Jetson TX2 (medium), and Raspberry Pi 4 (low-end) - the subnetwork sizes adjust following the $| \mathbf { D } |$ -averaged changes of local Fisher information. The results align with our expectations: When Fisher information is high, the subnetwork size increases to enhance the global model’s accuracy; as training proceeds and Fisher information decreases, indicating that its impacts on learning decrease, the subnetwork is becoming smaller to improve the training time efficiency. On the server side, the averaged size of the aggregated local subnetworks changes along with the global model’s Fisher information, which exhibits a similar trend to the local Fisher information. Figure 2 demonstrates that WHALE-FL effectively captures training dynamics while selecting appropriate subnetwork sizes for heterogeneous devices.
+
+# System Efficiency vs Training Efficiency
+
+To differentiate system efficiency’s contributions from training efficiency’s ones, we compare WHALE-FL with system efficiency utility only and training efficiency utility only schedulings. As the results shown in Fig. 3, WHALEFL converges faster than training efficiency only subnetwork scheduling when achieving the target accuracy, since training efficiency only design has no consideration of system dynamics and its impacts on subnetwork size selection; WHALE-FL has better testing accuracy but proceeds slower than system efficiency only subnetwork scheduling at the early training stage. The reason behind is that the system efficiency only design prioritizes system dynamics while ignoring dynamic model accuracy requirements for local training at different FL training stages. WHALE-FL trades-off system and training efficiencies and jointly considers their benefits for FL training.
+
+E ?   
+WHALEL 40 " WHALE WHALEL WHALE ... FedAvg ： .· FedAvg : … FedAvg 30   
+0.0 0.5 1.0 1.5 2.0 2.5 3.0 0.0 5.0 10.0 15.0 20.0 0.2 0.4 0.6 0.8 0.0 0.5 1.0 1.5 2.0   
+Training Time (hours) Training Time (hours) Training Time (hours) Training Time (hours)   
+2.0 1.0mg 2.0 1   
+! Local Fisher Info. i Local Fisher Info. Subnetwork Size Level 0.8 Global Fisher Info.   
+0 / 1 0 1.0 0.4 一 :-.-0.0 8 0 0.0   
+0.00.51.01.5 2.0 2.5 d 0.00.51.01.52.0 2.5 ? 0.00.51.01.52.02.53.0 d 0.00.51.01.5 2.0 2.5 3.0 ? Training Time (hours) Training Time (hours) Training Time (hours) Training Time (hours)
+
+Table 1: Performance comparison under different subnetwork methods (Speedup).   
+
+<html><body><table><tr><td rowspan="2">Task</td><td colspan="2">CV</td><td>NLP</td><td>HAR</td></tr><tr><td>CNN@MNIST</td><td>Resnet@CIFAR10</td><td>Transformer@Wikitext2</td><td>CNN@HAR</td></tr><tr><td>Target Accuracy</td><td>85%</td><td>70%</td><td>37%</td><td>88%</td></tr><tr><td>Method</td><td colspan="4">Speedup</td></tr><tr><td>WHALEvsHeteroFL</td><td>1.74x</td><td>1.25x</td><td>1.21x</td><td>1.06x</td></tr><tr><td>WHALERolexvsFedRolex</td><td>1.75x</td><td>1.32x</td><td>1.24x</td><td>1.10x</td></tr><tr><td>WHALEDropout vs FedDropout</td><td>1.70x</td><td>1.24x</td><td>1.20x</td><td>1.05x</td></tr></table></body></html>
+
+Table 2: Performance comparison under different subnetwork methods (Final Accuracy Improvement).   
+
+<html><body><table><tr><td rowspan="2">Task</td><td colspan="2">CV</td><td>NLP</td><td>HAR</td></tr><tr><td>CNN@MNIST</td><td>Resnet@CIFAR10</td><td>Transformer@Wikitext2</td><td>CNN@HAR</td></tr><tr><td>Method</td><td colspan="3">Final Accuracy Improvement</td></tr><tr><td>FedAvg</td><td>92.71%</td><td>80.61%</td><td>40.54%</td><td>92.94%</td></tr><tr><td>HeteroFL→WHALE</td><td>87.42% = 89.29%</td><td>71.65% = 75.32%</td><td>37.40% → 39.28%</td><td>88.86%91.38%</td></tr><tr><td>FedRolex=WHALERolex</td><td>87.82%  89.87%</td><td>72.52% = 79.57%</td><td>38.02% = 39.66%</td><td>89.11% = 92.03%</td></tr><tr><td>FedDropout→WHALERolex</td><td>86.16% = 87.52%</td><td>70.08% = 73.45%</td><td>37.19% = 39.06%</td><td>88.25% = 89.55%</td></tr></table></body></html>
+
+# Sensitivity Analysis
+
+We further evaluate the impacts of $\beta$ , $D = | \mathbf { D } |$ , and $U _ { t h }$ , defined in the subnetwork selection utility function, on subnetwork scheduling.
+
+The hyperparameter $\beta$ trades-off system efficiency and training efficiency utilities. The large/small $\beta$ value means that the device prioritizes system/training efficiency. As the results shown in Fig. 4(a) and Fig. 4(d), we find that the FL training converges slower but achieves higher testing accuracy when $\beta$ is small, e.g., $\beta = 1$ , while FL training is faster at early stages but achieves lower testing accuracy when $\beta$ is larger, e.g., $\beta = 5$ . System efficiency and training efficiency are somehow balanced when $\beta = 2$ . Thus, although $\beta$ is a developer-specified factor, a proper selection of $\beta$ value helps FL training converge fast while achieving good learning performance. The hyperparameter $D$ represents the window size for calculating the averaged Fisher information. A small window size, such as $D = 1$ in Fig. 4(b) and Fig. 4(e), makes the subnetwork size updates sensitive to changes in Fisher information, leading to fluctuations in model accuracy during training. Conversely, employing a larger window size, like $D = 2 0$ , results in slower subnetwork-size changes. This may cause a situation where a small-sized subnetwork is well-trained while the clients have no chance
+
+![](images/7d61cee88391fb22152882ac8010b871f27d46e9db4c9a1fd3979c6c30350fd6.jpg)  
+Figure 3: Performance comparison of WHALE-FL, system efficiency only and training efficiency only designs (ResNet18@CIFAR10).   
+Figure 4: Sensitivity analysis under different $\beta$ , $D$ , and $U _ { t h }$ values (a-c: CNN $@$ MNIST; d-e: Transformer $@$ WikiText2).
+
+1 90 9 90 80 8 70 0.4 0.6   
+0 2.8 ·β=2 3.0 0 ·D=10 -D=20 β=5 · FedAvg ！ · FedAvg   
+40 40   
+0.0 0.5 1.0 1.5 2.0 2.5 3.0 0.00.51.0 1.5 2.0 2.5 3.0 Training Time (hours) Training Time (hours)   
+(a) β, CNN@MNIST. (b) D, CNN@MNIST.   
+广 39.0 =10 0.70 0.75 0.80 th=20 FedAvg tb=50 β=5 .p-2Avg 25   
+0 1 2 3 0.0 0.2 0.4 0.6 0.8 Training Time (hours) Training Time (hours)   
+(c) $U _ { t h }$ , CNN@MNIST. (d) $\beta$ , Transf. $@$ WikiText2.   
+T 40 % .. 36 34 0.10 0.15 0.20   
+·D=10 D=20 U=10 ·Uth=50 .· FedAvg E FedAvg   
+25 25   
+0.0 0.2 0.4 0.6 0.8 0.0 0.2 0.4 0.6 0.8 Training Time (hours) Training Time (hours)   
+(e) $D$ , Transf. $@$ WikiText2. (f) $U _ { t h }$ , Transf. $@$ WikiText2.
+
+to switch to the larger-sized subnetworks, thus impairing the training performance during the critical learning periods. A window size of $D = 1 0$ strikes a good balance, achieving faster convergence. Similarly, a higher $U _ { t h }$ , e.g., $U _ { t h } = 5 0$ shown in Fig. 4(c) and 4(f), leads clients to choose smaller subnetworks, which speeds up FL convergence in the early stages by reducing transmission and computation delays but results in lower final accuracy. Conversely, with $U _ { t h } = 1 0$ , clients select larger subnetworks, which slows down convergence but yields higher accuracy. A proper $U _ { t h }$ selection helps to balance learning performance and delay efficiency.
+
+Table 3: Performance comparison under different data heterogeneity (CNN $@$ MNIST), where “SP” is the speedup.   
+
+<html><body><table><tr><td>Local Model</td><td colspan="3">CNN@MNIST</td></tr><tr><td>non-IID Level</td><td>σ=2</td><td>σ=5</td><td>σ=10</td></tr><tr><td>Target Acc.</td><td>85%</td><td>90%</td><td>95%</td></tr><tr><td>Metric</td><td colspan="3">Hours (SP)</td></tr><tr><td>FedAvg</td><td>1.12 (1.00x)</td><td>0.33 (1.00x)</td><td>0.30 (1.00x)</td></tr><tr><td>HeteroFL</td><td>1.06 (1.06x)</td><td>0.26 (1.27x)</td><td>0.10 (3.00x)</td></tr><tr><td>WHALE</td><td>0.61 (1.84x)</td><td>0.19 (1.74x)</td><td>0.08 (3.75x)</td></tr><tr><td>FedDropout</td><td>1.09 (1.03x)</td><td>0.28 (1.18x)</td><td>0.11 (2.73x)</td></tr><tr><td>WHALEDropout</td><td>0.64 (1.75x)</td><td>0.21 (1.57x)</td><td>0.08 (3.75x)</td></tr><tr><td>FedRolex</td><td>1.03 (1.09x)</td><td>0.25 (1.32x)</td><td>0.10 (3.00x)</td></tr><tr><td>WHALERolex</td><td>0.59 (1.90x)</td><td>0.18 (1.83x)</td><td>0.07 (4.29x)</td></tr></table></body></html>
+
+# Impacts of Data Heterogeneity
+
+We further evaluate the impacts of data heterogeneity on WHALE-FL’s performance. Here, we take CNN $@$ MNIST as an example and use the balanced non-IID data partition (Li et al. 2021b). The total number of classes in the MNIST dataset is 10. We study the cases where each device has $\sigma = 2 , 5$ or 10 classes, where the data distribution is IID if $\sigma = 1 0$ , i.e., every device has all classes. The results are shown in Table 3, where we find that (i) FL training with non-IID data takes longer time to converge, and (ii) embracing both system and training efficiency utilities, WHALE-FL can remarkably improve FL training delay efficiency when applied to existing subnetwork methods under various data heterogeneity scenarios.
+
+# Conclusion
+
+In this paper, we have proposed WHALE-FL, a wireless and heterogeneity aware latency efficient federated learning approach, to accelerate FL training over mobile devices via subnetwork scheduling. Unlike existing static fixed-size subnetwork assignments, WHALE-FL has incorporated an adaptive subnetwork scheduling policy, enabling mobile devices to flexibly select subnetwork sizes for local training, with a keen awareness of mobile devices’ system dynamics and FL training dynamics. At its core, WHALE-FL has employed a well-designed subnetwork selection utility function, capturing changes in the device’s system conditions (including available computing and communication capacities) and evolving FL training requirements for local training, to schedule appropriate subnetworks for mobile devices in each FL training round. Experimental results have demonstrated that WHALE-FL surpasses peer designs, significantly accelerating FL training over heterogeneous mobile devices without sacrificing learning accuracy.

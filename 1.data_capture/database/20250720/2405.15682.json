@@ -12,8 +12,10 @@
     ],
     "institutions": [
         "Google Research",
-        "Meta",
-        "Samsung AI Center"
+        "Fundamental AI Research Team, Meta",
+        "Samsung AI Center",
+        "Princeton University",
+        "Boston University"
     ],
     "publication_date": "2024-05-24",
     "venue": "Neural Information Processing Systems",

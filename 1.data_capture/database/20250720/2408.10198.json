@@ -17,14 +17,15 @@
         "Hao Su"
     ],
     "institutions": [
-        "Stanford University",
-        "University of California San Diego",
-        "University of California, Los Angeles",
+        "UC San Diego",
+        "Hillbot Inc.",
+        "UCLA",
+        "University of Central Florida",
         "Zhejiang University"
     ],
     "publication_date": "2024-08-19",
     "venue": "Neural Information Processing Systems",
-    "fields_of_study": [
+    "fields_of_study": [    
         "Computer Science"
     ],
     "citation_count": 26,
