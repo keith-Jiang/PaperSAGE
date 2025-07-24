@@ -1,21 +1,20 @@
 import json
 import streamlit as st
 
-with open("/home/zhangping/jrz-test/PaperSAGE/1.data_capture/database/20250720/2312.03701.json", "r", encoding='utf-8') as f:
+with open("/home/zhangping/jrz-test/PaperSAGE/1.data_capture/database/20250721/2507.14059.json", "r", encoding='utf-8') as f:
     paper = json.load(f)
 
-# 1. 检查 paper["summary"] 是否是字符串
-if isinstance(paper["summary"], str):
-    # 2. 解析它（因为它是一个 JSON 字符串）
-    print(paper["summary"][1250: 1300])
-    text = paper["summary"].replace("\\", "\\\\") 
-    summary = json.loads(text)
-else:
-    # 如果 paper["summary"] 已经是字典，直接使用
-    summary = paper["summary"]
+json_str = paper["summary"].strip().split("\n", 1)[1].rsplit("\n", 1)[0]
+summary = json.loads(json_str)
+# from json import JSONDecoder
+# decoder = JSONDecoder()
+# try:
+#     summary = decoder.decode(strings)
+# except json.JSONDecodeError as e:
+#     print(f"Error at position {e.pos}: {e.doc[e.pos-10:e.pos+10]}")
 
 # 3. 现在 summary 是一个字典，可以正常访问
-st.markdown(summary["core_summary"].replace("\\n", "  \n"))
-st.markdown(summary["algorithm_details"].replace("\\n", "  \n"))
-st.markdown(summary["comparative_analysis"].replace("\\n", "  \n"))
-st.markdown(summary["keywords"].replace("\\n", "  \n"))
+st.markdown(summary["core_summary"])
+st.markdown(summary["algorithm_details"])
+st.markdown(summary["comparative_analysis"])
+st.markdown(summary["keywords"])

@@ -11,7 +11,6 @@ import logging
 import sys
 
 # --- 0. 日志配置 ---
-# 设置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
                    handlers=[logging.StreamHandler(sys.stdout)])
 logger = logging.getLogger(__name__)
@@ -25,20 +24,16 @@ INPUT_FOLDER = "origin_papers/aaai-technical-track-on-machine-learning-vi"
 # 存放解析后 Markdown 文件的文件夹路径
 # OUTPUT_FOLDER = f"transferred_papers/{formatted_date}"
 OUTPUT_FOLDER = "transferred_papers/extra_1"
-# 您的 API Token
+# 您的 MinerU 的 API Token
 API_TOKEN = 'Bearer eyJ0eXBlIjoiSldUIiwiYWxnIjoiSFM1MTIifQ.eyJqdGkiOiI2MjQwMzE5MCIsInJvbCI6IlJPTEVfUkVHSVNURVIiLCJpc3MiOiJPcGVuWExhYiIsImlhdCI6MTc1Mjg0Mzc4NCwiY2xpZW50SWQiOiJsa3pkeDU3bnZ5MjJqa3BxOXgydyIsInBob25lIjoiIiwib3BlbklkIjpudWxsLCJ1dWlkIjoiMzhkZDYzMjAtNzQ3Ny00ZjhjLTgwNTYtMWE0NjliNWUyZDc4IiwiZW1haWwiOiIiLCJleHAiOjE3NTQwNTMzODR9.2MBgX_jgoq6Z6XZLcMoi7YLZuJdQ_Yb2GXRh8SA0KglP0LWQZjUOTsv-xpgrIjCNGf9nBrsyRtg9CmUjIt6g0Q'
-# API 基础 URL 和轮询间隔
-BASE_URL = 'https://mineru.net/api/v4'
+
+BASE_URL = 'https://mineru.net/api/v4'  #  API 的 URL
 POLLING_INTERVAL = 10  # 每 10 秒查询一次状态
-# 并行下载和处理的最大线程数
-MAX_DOWNLOAD_WORKERS = 6
+MAX_DOWNLOAD_WORKERS = 6  # 并行下载和处理的最大线程数
+PAPER_NUM = 200  # 论文数量
 
-
+# --- 脚本主体 ---
 def download_and_save_single_file(task):
-    """
-    【并行工作函数】处理单个文件的函数：下载、解压、保存。
-    返回一个描述结果的字符串。
-    """
     if task.get("state") != "done":
         return None  # 如果任务不是完成状态，则直接跳过
 
@@ -73,13 +68,11 @@ def download_and_save_single_file(task):
 
 
 def process_pdf_files():
-    """主处理函数"""
     Path(INPUT_FOLDER).mkdir(parents=True, exist_ok=True)
     Path(OUTPUT_FOLDER).mkdir(parents=True, exist_ok=True)
     api_headers = {'Content-Type': 'application/json', 'Authorization': API_TOKEN}
     pdf_files = [f for f in os.listdir(INPUT_FOLDER) if f.lower().endswith('.pdf')]
-    num = 300
-    paper_count = min(len(pdf_files), num)
+    paper_count = min(len(pdf_files), PAPER_NUM)
     if paper_count < len(pdf_files):
         pdf_files = random.sample(pdf_files, paper_count)
     
@@ -129,7 +122,7 @@ def process_pdf_files():
                 time.sleep(POLLING_INTERVAL)
                 continue
             extract_results = result.get("data", {}).get("extract_result", [])
-            if not extract_results: 
+            if not extract_results:
                 time.sleep(POLLING_INTERVAL)
                 continue
                 
@@ -171,8 +164,6 @@ def process_pdf_files():
     except Exception as e:
         logger.error(f"处理过程中发生未知错误: {str(e)}", exc_info=True) # exc_info=True 会记录完整的堆栈跟踪
 
+
 if __name__ == "__main__":
-    if '请' in API_TOKEN or len(API_TOKEN) < 20:
-        logger.error("错误：请先在脚本中配置您的有效 API_TOKEN。")
-    else:
-        process_pdf_files()
+    process_pdf_files()

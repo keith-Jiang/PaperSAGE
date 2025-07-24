@@ -3,16 +3,26 @@ import json
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
+import logging
+import sys
 
 from transformers import AutoTokenizer
 from dotenv import load_dotenv
 from volcenginesdkarkruntime import Ark
 
+# 假设这些prompt模块存在于指定的路径下
 from prompts.ensemble_prompt import ensemble_prompt
 from prompts.refine_prompt import refine_prompt
 from prompts.summary_prompt import summary_prompt_v3
 
-# --- 1. 全局配置与初始化 (只执行一次) ---
+# --- 0. 日志配置 ---
+# 配置日志记录器，设置级别为INFO，格式包含时间、级别和消息
+# handlers指定将日志输出到标准输出流(控制台)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
+                   handlers=[logging.StreamHandler(sys.stdout)])
+logger = logging.getLogger(__name__)
+
+# --- 1. 全局配置与初始化 ---
 load_dotenv()
 
 # 从环境变量加载配置
@@ -22,15 +32,13 @@ BASE_URL = os.getenv("ARK_API_ENDPOINT", "https://ark.cn-beijing.volces.com/api/
 TIMEOUT = int(os.getenv("ARK_TIMEOUT", 1800))
 TOKENIZER_PATH = "/home/zhangping/jrz-test/models/sft/Qwen/Qwen2.5-7B"
 
-# 创建唯一的、可复用的客户端和分词器实例
-# 这是性能优化的关键点之一：避免重复创建对象和建立连接
 try:
     client = Ark(api_key=ARK_KEY, base_url=BASE_URL, timeout=TIMEOUT)
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
-    print("Ark Client and Tokenizer initialized successfully.")
+    logger.info("Ark Client 和 Tokenizer 初始化成功。")
 except Exception as e:
-    print(f"Error initializing services: {e}")
-    exit(1)
+    logger.error(f"初始化服务时出错: {e}")
+    sys.exit(1) # 初始化失败则退出程序
 
 # --- 2. 抽离出通用的API调用函数 (遵循DRY原则) ---
 def call_ark_api(prompt_content: str, temperature: float, top_p: float):
@@ -41,9 +49,12 @@ def call_ark_api(prompt_content: str, temperature: float, top_p: float):
     start_time = time.time()
     
     # 打印Token数量，用于调试和成本估算
-    token_count = len(tokenizer.encode(prompt_content))
-    print(f"Submitting prompt with {token_count} tokens...")
-    
+    try:
+        token_count = len(tokenizer.encode(prompt_content))
+        logger.info(f"提交的 prompt token 数量为: {token_count} tokens...")
+    except Exception as e:
+        logger.warning(f"计算 token 数量时出错: {e}")
+
     try:
         completion = client.chat.completions.create(
             model=ARK_MODEL,
@@ -56,27 +67,35 @@ def call_ark_api(prompt_content: str, temperature: float, top_p: float):
         
         end_time = time.time()
         total_time = end_time - start_time
-        print(f"API call successful. Time taken: {total_time:.2f} seconds.")
+        logger.info(f"API 调用成功。耗时: {total_time:.2f} 秒。")
         
         return content
     except Exception as e:
-        print(f"An error occurred during API call: {e}")
+        logger.error(f"API 调用期间发生错误: {e}")
         return None # 在出错时返回None，方便上层处理
 
 # --- 3. 主逻辑 ---
-def summary_func(arxiv_id, data_folder):
+def summary_func(md_path):
+    """
+    生成论文摘要的主函数，包含发散、整合、反思三个阶段。
+    
+    :param arxiv_id: 论文的ArXiv ID
+    :param data_folder: 存放论文Markdown文件的目录
+    :return: 最终生成的摘要字符串，如果失败则返回None
+    """
     # 读取论文文件
     try:
-        with open(f"{data_folder}/{arxiv_id}.md", 'r', encoding='utf-8') as f:
+        with open(md_path, 'r', encoding='utf-8') as f:
             paper = f.read()
+        logger.info(f"成功读取论文文件: {md_path}")
     except FileNotFoundError:
-        print("Error: Paper file not found.")
-        return
+        logger.error(f"错误: 找不到论文文件 {md_path}。")
+        return None
 
     summaries = {}
 
     # --- 阶段1：发散探索 (并行处理) ---
-    print("\n--- Stage 1: Divergent Exploration (Running in Parallel) ---")
+    logger.info("\n--- 阶段1：发散探索 (并行处理) ---")
     start_stage1_time = time.time()
     
     # 定义需要并行执行的任务
@@ -97,44 +116,43 @@ def summary_func(arxiv_id, data_folder):
                 result = future.result()
                 if result:
                     summaries[name] = result
-                    print(f"Successfully completed task: {name}")
+                    logger.info(f"成功完成任务: {name}")
                 else:
-                    print(f"Task {name} failed and returned no result.")
+                    logger.warning(f"任务 {name} 失败，未返回结果。")
             except Exception as exc:
-                print(f"Task {name} generated an exception: {exc}")
+                logger.error(f"任务 {name} 执行时产生异常: {exc}")
 
     end_stage1_time = time.time()
-    print(f"Stage 1 completed in {end_stage1_time - start_stage1_time:.2f} seconds.")
+    logger.info(f"阶段1完成，耗时 {end_stage1_time - start_stage1_time:.2f} 秒。")
     
+    # 检查必要摘要是否已生成
     if "summary_1" not in summaries or "summary_2" not in summaries:
-        print("Could not generate initial summaries. Aborting.")
-        return
+        logger.error("未能生成初始摘要，处理中止。")
+        return None
 
-    print("--- 初始摘要 1 ---\n", summaries['summary_1'])
-    print("--- 初始摘要 2 ---\n", summaries['summary_2'])
+    logger.info(f"--- 初始摘要 1 ---\n{summaries['summary_1']}")
+    logger.info(f"--- 初始摘要 2 ---\n{summaries['summary_2']}")
 
     # --- 阶段2：收敛整合 (串行处理) ---
-    print("\n--- Stage 2: Convergent Integration ---")
+    logger.info("\n--- 阶段2：收敛整合 ---")
     ensemble_prompt_formatted = ensemble_prompt.format(paper=paper, summary_1=summaries['summary_1'], summary_2=summaries['summary_2'])
     summary_3 = call_ark_api(ensemble_prompt_formatted, temperature=0.0, top_p=1.0)
     if not summary_3:
-        print("Failed to generate ensemble summary. Aborting.")
-        return
-    print("--- 整合后摘要 ---\n", summary_3)
+        logger.error("生成整合摘要失败，处理中止。")
+        return None
+    logger.info(f"--- 整合后摘要 ---\n{summary_3}")
 
     # --- 阶段3：收敛反思 (串行处理) ---
-    print("\n--- Stage 3: Refinement and Reflection ---")
+    logger.info("\n--- 阶段3：反思与精炼 ---")
     refine_prompt_formatted = refine_prompt.format(paper=paper, summary=summary_3)
     final_summary = call_ark_api(refine_prompt_formatted, temperature=0.0, top_p=1.0)
     if not final_summary:
-        print("Failed to generate final refined summary.")
-        return
-    print("--- 最终反思摘要 ---\n", final_summary)
+        logger.error("生成最终精炼摘要失败。")
+        return None
+    logger.info(f"--- 最终反思摘要 ---\n{final_summary}")
 
     return final_summary
 
 
 if __name__ == "__main__":
-    arxiv_id = "2309.04062"
-    summary_func(arxiv_id)
-
+    pass

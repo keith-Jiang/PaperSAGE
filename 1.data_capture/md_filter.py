@@ -9,7 +9,6 @@ import logging
 import sys
 
 # --- 0. 日志配置 ---
-# 设置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
                    handlers=[logging.StreamHandler(sys.stdout)])
 logger = logging.getLogger(__name__)
@@ -26,6 +25,7 @@ OUTPUT_FOLDER = "transferred_papers/extra_1"
 TOKENIZER_PATH = "/home/zhangping/jrz-test/models/sft/Qwen/Qwen2.5-7B"
 
 
+# --- 脚本主体 ---
 def remove_unwanted_sections(markdown_content, section_titles):
     """
     从Markdown文本中移除指定的章节及其之后的所有内容。

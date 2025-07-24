@@ -11,25 +11,13 @@ from pathlib import Path
 from zipfile import ZipFile
 from io import BytesIO
 import concurrent.futures
+from summary_test_api import summary_func
 # from transformers import AutoTokenizer # 暂时用不到
 # from bs4 import BeautifulSoup # 暂时用不到
 
 # =================================================================
 # 0. 模块导入与占位符
 # =================================================================
-# --- 假设的外部模块 ---
-# 我们先用占位符函数替代，以确保UI可以独立运行
-def summary_func(arxiv_id):
-    """占位符：模拟调用大模型生成总结"""
-    st.toast(f"正在为 {arxiv_id} 生成总结...")
-    time.sleep(2) # 模拟耗时
-    # 模拟返回一个包含Markdown的JSON字符串
-    summary_data = {
-        "一句话总结": "### 🚀 一句话总结\n\n这是一篇关于 Transformer 模型的开创性论文，提出了'Attention Is All You Need'的核心思想。",
-        "核心贡献": "### 🎯 核心贡献\n\n- **自注意力机制**: 完全替代了循环和卷积结构。\n- **位置编码**: 解决了序列中词语的位置信息问题。\n- **多头注意力**: 允许模型在不同表示子空间中共同关注来自不同位置的信息。"
-    }
-    return json.dumps(summary_data, ensure_ascii=False, indent=4)
-
 def translate_text(text_to_translate):
     """占位符：模拟调用翻译API"""
     st.toast(f"正在翻译选定文本...")
@@ -64,7 +52,6 @@ ARXIV_CATEGORIES = {
         "cs.AI", "cs.CL", "cs.CV", "cs.LG", "cs.NE", "cs.RO",
         "cs.CR", "cs.DS", "cs.IT", "cs.SE"
     ]
-    # 可以添加更多顶级分类
 }
 
 
@@ -207,11 +194,9 @@ def create_paper_json(arxiv_id, md_path, db_save_path):
         with open(md_path, 'r', encoding='utf-8') as f:
             paper_info['paper_content'] = f.read()
 
-        # 调用我们模拟的总结函数
-        paper_info['summary'] = summary_func(arxiv_id) 
+        paper_info['summary'] = summary_func(md_path) 
 
         # 根据你的新要求，数据库路径现在包含日期和分类
-        # 这里我们假设它来自一个通用处理流程，先不加分类
         db_save_path.parent.mkdir(parents=True, exist_ok=True)
         with open(db_save_path, 'w', encoding='utf-8') as f:
             json.dump(paper_info, f, ensure_ascii=False, indent=4)
@@ -246,8 +231,7 @@ def display_paper_summary(paper_data, container=st):
 
     with col1:
         container.markdown(f"**✍️ 作者:** {', '.join(paper_data.get('authors', ['未找到作者信息']))}")
-        institutions = paper_data.get('institutions', ["未找到机构信息"])
-        container.markdown(f"**🏢 机构:** {', '.join(institutions)}")
+        container.markdown(f"**🏢 机构:** {', '.join(paper_data.get('institutions', ["未找到机构信息"]))}")
         container.markdown(f"**🗓️ 发表日期:** {paper_data.get('publication_date', '未找到发表日期')}")
     
     with col2:
@@ -378,7 +362,6 @@ def render_smart_summary_page():
                     status.update(label=f"错误: {error}", state="error"); return
 
                 st.write("4/5: 正在抓取元数据并生成总结...")
-                # 注意：这里我们假设处理的论文没有预先分类，所以保存在日期目录下
                 json_path, final_data, error = create_paper_json(arxiv_id, cleaned_md_path, final_json_path)
                 if error:
                     status.update(label=f"错误: {error}", state="error"); return

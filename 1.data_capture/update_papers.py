@@ -5,11 +5,16 @@ from pathlib import Path
 import logging
 import sys
 import re
-# 从三天内的找，是否有重复
-# --- 1. 配置区 ---
+
+# --- 0. 日志配置 ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
+                   handlers=[logging.StreamHandler(sys.stdout)])
+logger = logging.getLogger(__name__)
+
+# --- 1. 全局配置区 ---
 CATEGORIES = [
     "cs.AI", "cs.LG", "cs.CV", "cs.CL", "cs.RO", 
-    "cs.NE", "cs.IR", "cs.DC", "cs.AR", "cs.CR"
+    "cs.NE", "cs.IR", "cs.DC", "cs.AR", "cs.CR", "cs.ET"
 ]
 MAX_PAPERS = 50
 now = datetime.now()
@@ -17,12 +22,6 @@ formatted_date = now.strftime("%Y%m%d")
 PAPERS_DIR = Path(f"./origin_papers/{formatted_date}")
 
 # --- 脚本主体 ---
-
-# 设置日志
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
-                   handlers=[logging.StreamHandler(sys.stdout)])
-logger = logging.getLogger(__name__)
-
 # 如果不存在论文目录则创建 (确保父目录也能被创建)
 PAPERS_DIR.mkdir(parents=True, exist_ok=True)
 logger.info(f"论文将保存在: {PAPERS_DIR.absolute()}")
@@ -55,8 +54,6 @@ def get_daily_papers(categories, max_results=MAX_PAPERS):
 def download_paper(paper, output_dir):
     """将论文PDF下载到指定目录，使用ArXiv ID作为文件名。"""
     # 1. 获取论文的ArXiv ID作为文件名 (例如 '2301.12345v1')
-    # get_short_id() 方法返回格式如 '2103.17239' 的ID，不包含版本号
-    # ArXiv ID 本身就是安全的文件名，无需清理
     arxiv_id = paper.get_short_id()
     arxiv_id = arxiv_id.split('v')[0]  # 移除版本后缀
     pdf_filename = f"{arxiv_id}.pdf"
