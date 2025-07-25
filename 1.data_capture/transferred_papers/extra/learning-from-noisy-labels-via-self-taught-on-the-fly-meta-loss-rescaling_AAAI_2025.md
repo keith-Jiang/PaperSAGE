@@ -1,0 +1,245 @@
+# Learning from Noisy Labels via Self-Taught On-the-Fly Meta Loss Rescaling
+
+Michael Heck, Christian Geishauser, Nurul Lubis, Carel van Niekerk, Shutong Feng, Hsien-Chin Lin, Benjamin Matthias Ruppik, Renato Vukovic, Milica Gasˇi´c
+
+Heinrich Heine University D¨usseldorf {heckmi,geishaus,lubis,niekerk,fengs,linh,ruppik,revuk100,gasic}@hhu.de
+
+# Abstract
+
+Correct labels are indispensable for training effective machine learning models. However, creating high-quality labels is expensive, and even professionally labeled data contains errors and ambiguities. Filtering and denoising can be applied to curate labeled data prior to training, at the cost of additional processing and loss of information. An alternative is on-thefly sample reweighting during the training process to decrease the negative impact of incorrect or ambiguous labels, but this typically requires clean seed data. In this work we propose unsupervised on-the-fly meta loss rescaling to reweight training samples. Crucially, we rely only on features provided by the model being trained, to learn a rescaling function in real time without knowledge of the true clean data distribution. We achieve this via a novel meta learning setup that samples validation data for the meta update directly from the noisy training corpus by employing the rescaling function being trained. Our proposed method consistently improves performance across various NLP tasks with minimal computational overhead. Further, we are among the first to attempt on-the-fly training data reweighting on the challenging task of dialogue modeling, where noisy and ambiguous labels are common. Our strategy is robust in the face of noisy and clean data, handles class imbalance, and prevents overfitting to noisy labels. Our self-taught loss rescaling improves as the model trains, showing the ability to keep learning from the model’s own signals. As training progresses, the impact of correctly labeled data is scaled up, while the impact of wrongly labeled data is suppressed.
+
+Code — https://gitlab.cs.uniduesseldorf.de/general/dsml/storm-public Extended — https://doi.org/10.48550/arXiv.2412.12955
+
+# Introduction
+
+High-quality training data is paramount for developing accurate, safe, and reliable machine learning models. Real-world datasets, however, often contain noise, ambiguities, biases, and errors. Ever larger models increase the need for automatic training data generation, exacerbating label noise issues. Inconsistencies in data degrade model training, limit performance and hinder generalizability (Frenay and Verleysen 2014). The complexity of human language renders natural language processing (NLP) labeling tasks inherently challenging, even for experienced annotators (Marcus, Santorini, and Marcinkiewicz 1993). Inter-annotator agreement on labeling tasks depends on factors like task description and guidance, annotator skills and knowledge, and level of attention (Manning 2011).
+
+One approach to mitigating noisy labels is sample selection, which involves identifying and removing noisy samples before training or updating the model (Shen and Sanghavi 2019; Chen et al. 2019; Huang et al. 2019). This method exploits the overfitting tendency of DNNs to detect noisy samples through model weight trajectories or loss cutoffs (Yang et al. 2019; Li, Soltanolkotabi, and Oymak 2020; Shen and Sanghavi 2019). Advanced approaches use collaborative multi-network learning (Han et al. 2018; Jiang et al. 2018). Despite its effectiveness, sample selection requires significant computational resources, struggles with over-filtering, and makes permanent filtering errors early in the process, causing information loss.
+
+Another tactic is loss adjustment, which modifies sample losses during training, allowing to fully explore the noisy dataset. This can be achieved by learning noise transition matrices (Patrini et al. 2017), correcting labels (Reed et al. 2015), estimating reweighting functions (Wang, Liu, and Tao 2018) or via meta learning (Finn, Abbeel, and Levine 2017). Loss rescaling adjusts sample losses to control their effect on the model training on-the-fly. Examples of methods for DNNs are importance reweighting and active bias (Liu and Tao 2016; Chang, Learned-Miller, and McCallum 2017). Other approaches utilize additional models to identify noisy samples during training (Zhang, Xing, and Liu 2021). Despite their versatility, these methods typically require clean data to estimate “true” distributions of uncorrupted data, and rely on predefined adjustment functions and hyperparameters related to the expected noise type.
+
+Meta learning offers a solution by automating loss rescaling, thus eliminating manual function definition. This higher-order learning estimates noise type agnostic rescaling functions using meta models or unified neural models (Dehghani et al. 2017; Shu et al. 2019; Li et al. 2019; Ren et al. 2018). Yet, they still depend on clean validation data to learn the rescaling function or the meta objective.
+
+But what if clean data is not available? Oftentimes clean data simply does not exist and its procurement is time consuming, expensive and itself prone to errors.
+
+Adaptive gradient-based outlier removal (AGRA) (Sedova, Zellinger, and Roth 2023) sidesteps the need for clean validation data by using gradient comparisons to decide onthe-fly whether a sample is useful in the current stage of training. However, its binary decisions, reliance on gradient similarity and lack of meta learning limit AGRA’s flexibility and robustness.
+
+In this paper, we introduce STORM (Self-Taught Onthe-fly Rescaling via Meta loss), a flexible loss rescaling method for learning from noisy labels. Our contributions are as follows:
+
+A novel meta learning scheme called meta loss rescaling that eliminates the need for clean validation data by rescaling both the loss in the inner loop and the meta loss in the outer loop, using noisy validation data.   
+A flexible loss rescaling that dynamically decides how much importance to assign to a sample at each training stage and keeps learning from the model’s own signals.   
+An efficient loss rescaling that uses features based on sample losses and prediction probabilities instead of sample gradients, reducing computational complexity.   
+A robust loss rescaling that handles class imbalance, different types of noise, and prevents overfitting.   
+An application to dialogue modeling as an underexplored use case for loss rescaling, markedly improving performance in this noise sensitive task.   
+An extensive empirical evaluation on various NLP tasks that validates STORM’s ability to identify noisy and ambiguous samples with high recall and low false positives.
+
+# Self-Taught On-the-Fly Meta Loss Rescaling
+
+STORM aims to decrease the impact of noisy labels and increase the impact of correctly labeled samples, without prior assumptions about noise distribution or using clean reference data. Rescaling is done on-the-fly, starting with a freshly initialized model without prior knowledge of the target task. Using meta loss rescaling to learn from noisy labels avoids information loss, as it does not omit data from training entirely and decisions are not static. At each training epoch, upon revisiting training data, the rescaling is adjusted according to the current state of the model being trained such that the negative impact of label noise is minimized. This results in (1) the model benefiting differently from the same sample at each epoch, and (2) the rescaling function continuously updating via self-teaching based on the model’s grasp of the data. Fig. 1 is an illustration of STORM, and Alg. 1 outlines the algorithm.
+
+# Optimization Problem
+
+We use classification as a representative machine learning task. We assume to only have access to a training set ${ \mathfrak { X } } =$ $\{ ( x _ { i } , \tilde { y } _ { i } ) \} _ { i = 1 } ^ { N }$ with noisy labels $\tilde { y } _ { i }$ . Let $\Theta _ { \theta } ( \cdot ) : \mathfrak { X } \overset { \smile } { \to } \mathbb { R } ^ { C }$ be a model we train to solve a $C$ way classification task. The parameters $\theta$ are subject to optimization via minimizing a loss function $\ell _ { i } = \mathcal { L } _ { \boldsymbol { \theta } } ( \hat { y } _ { i } , \tilde { y } _ { i } )$ for each pair of model prediction $\hat { y } _ { i } = \mathrm { a r g m a x } _ { c } \Theta _ { \theta } ( x _ { i } )$ and noisy label $\tilde { y } _ { i }$ for input $x _ { i }$ .
+
+![](images/abaa814343c80b16a8e4d3a83a6ac6de77c3502e8dae6e3cee26350ef8682b83.jpg)  
+Figure 1: Schematic of STORM. Numbered black arrows correspond to inner loop updates, i.e., learning $\Theta$ . Numbered red and blue arrows correspond to outer loop updates, i.e., meta learning $\Omega$ . Dashed arrows indicate gradient flows.
+
+In regular training, we minimize $\begin{array} { r } { \sum _ { i = 1 } ^ { N } \mathcal { L } _ { \boldsymbol { \theta } } ( \hat { y } _ { i } , \tilde { y } _ { i } ) } \end{array}$ . With STORM, we learn a rescaling function $\Omega _ { \omega } ( \cdot )$ such that samples are effectively reweighted, i.e., we optimize $\theta$ by minimizing a weighted loss,
+
+$$
+\theta ^ { * } = \mathrm { a r g m i n } _ { \theta } \sum _ { i = 1 } ^ { N } \Omega _ { \omega } ( \pmb { f } _ { i } ) \cdot \mathcal { L } _ { \theta } ( \hat { y } _ { i } , \tilde { y } _ { i } ) .
+$$
+
+Our rescaling function expects input features $f _ { i }$ that are computed directly from signals of the model being trained by conducting forward passes through $\Theta$ . The optimal $\omega$ is not known and needs to be learned by minimizing the meta loss, i.e.,
+
+$$
+\omega ^ { * } = \arg \operatorname* { m i n } _ { \omega } \sum _ { j = 1 } ^ { M } \mathcal { L } _ { \theta ^ { * } } ( \hat { y } _ { j } , \tilde { y } _ { \mathrm { v a l } , j } ) ,
+$$
+
+where $\mathfrak { V } = \{ ( x _ { \mathrm { v a l } , j } , \tilde { y } _ { \mathrm { v a l } , j } ) \} _ { j = 1 } ^ { M }$ are samples from a validation set. For STORM, it is ${ \mathfrak { V } } = { \mathfrak { X } }$ , therefore $\tilde { y } _ { \mathrm { v a l } , j }$ is a noisy label. It becomes apparent that optimizing $\Theta$ and $\Omega$ is a chicken-and-egg problem. Meta learning allows us to continuously update $\Omega$ on-the-fly, i.e., during the training of $\Theta$ , in a single optimization loop.
+
+# Learning the Model $\Theta$
+
+Without loss of generalization, we define
+
+$$
+\begin{array} { r } { \Theta _ { \theta } ( x _ { i } ) = \mathrm { s o f t m a x } \big ( \mathrm { C l a s s i f y } _ { \theta _ { \mathrm { c } } } \big ( \mathrm { E n c } _ { \theta _ { \mathrm { c } } } ( x _ { i } ) \big ) \big ) \in \mathbb { R } ^ { C } , } \end{array}
+$$
+
+$\operatorname { E n c } ( { \mathord { \cdot } } )$ is an input encoder such as a transformer network, and Classify $( \cdot )$ is a trainable model such as a single linear layer, a multi layer perceptron or a deep neural network. It is $( \theta _ { \mathrm { c } } , \theta _ { \mathrm { e } } ) \in \theta$ .
+
+Meta learning – also referred to as “learning to learn” – involves two levels of learning: an inner loop and an outer loop. In the inner loop, the model $\Theta$ is trained on a specific task. The outer loop trains meta parameters by evaluating $\Theta$ ’s performance on a meta validation set and backpropagating through a rolled-out inner loop’s gradient graph. In the inner loop of meta learning, we update $\theta$ via stochastic gradient descent (SGD) using the weighted loss of Equation 1, which helps the model to focus on more relevant samples within a mini-batch $\mathfrak { B } \in \mathfrak { X } . \omega$ is initialized such that $\operatorname { \ i } 2 _ { \omega } ( \mathfrak { B } )$ produces uniformly distributed weights across samples in the mini-batch, i.e., initially, the inner loop approximates regular training without rescaling.
+
+# Input Features to $\Omega$
+
+The input features $f _ { i }$ to $\Omega$ for a single sample $x _ { i }$ are obtained from $\Theta$ . We can perform a forward pass multiple times with random dropout to generate variance in the model output. The probability and loss of forward pass $g$ out of $G$ passes is denoted as $p _ { i , g }$ and $\ell _ { i , g }$ , respectively. We store these two fundamental features in a LIFO memory ${ \mathfrak { M } } _ { \mathfrak { D } }$ for all samples in a batch $\mathfrak { B } = \{ ( x _ { i } , \tilde { y } _ { i } ) \} _ { i = 1 } ^ { B } \in \dot { \mathfrak { D } }$ . The size of this memory is set by a parameter $m _ { \mathrm { s i z e } }$ . ${ \mathfrak { M } } _ { \mathfrak { D } }$ is continuously updated throughout training. With these two fundamental feature types, we compute additional features according to equations in Tab. 1. We compute means and standard deviations for individual samples and across sample groups, which helps capture central tendencies and variability as measures for sample typicality. Kullback-Leibler (KL) divergence and overlap coefficient (OVL) (Inman and Jr 1989) are more sophisticated measures of distributional differences and similarities that help detect outliers. KL and OVL provide complementary information. KL measures divergence, is asymmetric and more sensitive to outliers, while OVL measures agreement and is symmetric. Lastly, a binary indicator (CAT) for model prediction and label agreement adds the factor of model performance to $\Omega$ ’s input, which helps identify challenging samples. Our feature set is
+
+$$
+\begin{array} { r l } & { \mathbf { \varPsi } _ { i } = ( \bar { \ell } _ { i } , \bar { \ell } , \bar { \ell } , \check { \ell } _ { i } , \check { \ell } , \check { \ell } , \check { \ell } , \bar { p } _ { i } , \bar { p } , \bar { \check { p } } , \check { p } _ { i } , \check { p } , \check { p } , \check { \check { p } } , } \\ & { \qquad \mathrm { K L } _ { i } , \bar { \mathrm { K L } } , \bar { \mathrm { K L } } , \bar { \mathrm { O V L } } _ { i } , \mathrm { O } \bar { \mathrm { V L } } , \mathrm { O } \bar { \check { \mathrm { V L } } } , \mathrm { C A T } _ { i } ) . } \end{array}
+$$
+
+In practice, we separate the feature computation by target classes $C$ , i.e., $\pmb { f } _ { i } ( \tilde { y } _ { i } )$ is target class dependent. For readability, we use the shorthand $f _ { i }$ for the remainder of the paper.
+
+# Meta Learning the Rescaling Function $\Omega$
+
+In the outer loop, we calculate the total meta loss of a batch $\mathfrak { B } _ { \mathrm { v a l } }$ of samples from a validation set w.r.t. to the loss weights $\Omega _ { \omega } ( \mathfrak { B } )$ of the current training batch $\mathfrak { B }$ and compute its meta-gradients. For this, we roll out the inner loop’s gradient graph to get the gradients $\nabla \theta$ . Then we compute a backward-on-backward derivative given the meta loss to get second-order gradients for a full backward pass through the unrolled graph resulting in $\nabla _ { \mathrm { m e t a } } \omega$ .
+
+With this backward pass, we could update $\Omega$ w.r.t. the meta loss. Since we lack clean validation data for the meta update, we modify this step as follows: we sample $\mathfrak { B } _ { \mathrm { v a l } }$ from the noisy training set and use $\Omega$ to rescale its individual sample losses in the outer loop, i.e.,
+
+$$
+\omega ^ { * } = \arg \operatorname* { m i n } _ { \omega } \sum _ { j = 1 } ^ { M } \Omega _ { \omega } ( f _ { j } ) \cdot \mathcal { L } _ { \theta ^ { * } } \big ( \hat { y } _ { j } , \tilde { y } _ { \mathrm { v a l } , j } \big ) ,
+$$
+
+# Algorithm 1: STORM
+
+Data: Initial $\theta$ , initial $\omega$ , noisy training batches $\mathfrak { X }$ , noisy validation batches $\mathfrak { V }$ , forward passes $G$   
+Result: Trained model $\Theta _ { \theta ^ { \ast } }$ and rescaler $\Omega _ { \omega } .$ \*   
+while training continues do // Inner loop learns $\Theta$ for each inner loop traversal do $\mathfrak { B } $ SampleBatch $( { \mathfrak { X } } )$ ; ${ \pmb F } \gets$ GetRescalerFeatures $( \Theta _ { \theta } , \mathfrak { B } , G )$ ; ℓ Forward $( \Theta _ { \theta } , \mathfrak { B } )$ ; $\nabla \theta \gets \mathrm { B a c k w a r d } ( \Omega _ { \omega } ( F ) , \ell )$ ; $\theta ^ { * } \gets \mathrm { O p t i m i z e } ( \theta , \nabla \theta )$ ; $\theta \gets \theta ^ { * }$ ; end // Outer loop meta learns $\Omega$ $\mathfrak { B } _ { \mathrm { v a l } }  \mathrm { S a m p l e B a t c h ( \mathfrak { V } ) }$ ; ${ \cal F } _ { \mathrm { v a l } } $ GetRescalerFeatures $( \Theta _ { \theta ^ { \ast } } , \mathfrak { B } _ { \mathrm { v a l } } , G )$ ; $\ell _ { \theta ^ { * } } \gets \mathrm { F o r w a r d } ( \Theta _ { \theta ^ { * } } , \mathfrak { B } _ { \mathrm { v a l } } )$ ; $\nabla _ { \mathrm { m e t a } } \omega$ $\mathrm { , } \nabla _ { \mathrm { o u t e r } } \omega \gets \mathrm { B a c k w a r d } ( \Omega _ { \omega } ( F _ { \mathrm { v a l } } ) , \ell _ { \theta ^ { \ast } } ) ;$ ω∗ ← Optimize(ω, ∇metaω, $\nabla _ { \mathrm { o u t e r } } \omega ,$ ); $\omega  \omega ^ { * }$ ;   
+end
+
+$$
+\begin{array} { r l } & { \bar { o } _ { i } = \mathsf { m e a n } ( \{ o _ { i , g } \} _ { g = 1 } ^ { G } ) \quad \breve { o } _ { i } = \mathsf { s t a n } ( \{ o _ { i , g } \} _ { g = 1 } ^ { G } ) } \\ & { \bar { o } = \mathsf { m e a n } ( \{ \bar { o } _ { b } \} _ { b = 1 } ^ { B } ) \quad \breve { o } = \mathsf { s t d } ( \{ \bar { o } _ { b } \} _ { b = 1 } ^ { B } ) } \\ & { \bar { \breve { o } } = \mathsf { m e a n } ( \{ \breve { o } _ { b } \} _ { b = 1 } ^ { B } ) \quad \breve { o } = \mathsf { s t d } ( \{ \breve { o } _ { b } \} _ { b = 1 } ^ { B } ) } \\ & { \mathrm { K L } _ { i } = \mathcal { D } _ { \mathrm { K L } } ( \mathcal { N } ( \bar { \ell } _ { i } , \breve { \ell } _ { i } ) \thinspace  \mathcal { N } ( \bar { \ell } , \bar { \ell } ) ) \quad \mathrm { C A T } _ { i } = \mathbb { 1 } _ { \bar { y } _ { i } = \bar { y } _ { i } } } \\ & { \mathrm { O V L } _ { i } = \mathsf { o v e r l a p } ( \mathcal { N } ( \bar { \ell } _ { i } , \breve { \ell } _ { i } ) , \mathcal { N } ( \bar { \ell } , \bar { \ell } ) ) } \end{array}
+$$
+
+Table 1: Equations for individual and group-level feature computation based on losses $\ell _ { i }$ and probabilities $p _ { i }$ .
+
+also backpropagating through $\Omega$ with regular first-order derivatives resulting in $\nabla _ { \mathrm { o u t e r } } \omega$ . Therefore, $\omega$ is updated jointly via gradient accumulation of $\nabla _ { \mathrm { m e t a } } \omega$ and $\nabla _ { \mathrm { o u t e r } } \omega$ . In the meta-update step, only the rescaling function $\Omega$ undergoes parameter updates. The rescaling function is implemented as a trainable neural network. Without loss of generalization, we design the rescaling function as
+
+$$
+\begin{array} { r l } & { \left[ w _ { 0 , i } , w _ { 1 , i } \right] = \Omega _ { \omega } ( \pmb { f } _ { i } ) = } \\ & { \quad \mathrm { s o f t m a x } ( \mathbf { B N } _ { 2 } ( \operatorname { L } _ { 2 } ( \operatorname { R e L U } ( \mathbf { B N } _ { 1 } ( \operatorname { L } _ { 1 } ( \pmb { f } _ { i } ) ) ) ) ) \in \mathbb { R } ^ { 2 } } \end{array}
+$$
+
+where $\mathrm { L } _ { ( \cdot ) }$ is a linear layer, $\mathbf { B N } _ { ( \cdot ) }$ is a batch normalization layer (Ioffe and Szegedy 2015), and $\mathtt { R e L U ( \cdot ) }$ is the rectified linear unit activation function. While the general design of this network is flexible, the last batch normalization layer is critical. Our rescaler has two target classes. We use the prediction $w _ { 0 , i }$ as the loss rescaling weight and discard $w _ { 1 , i }$ . The batch normalization before the softmax layer ensures that the degenerate case is prevented where $w _ { 0 , i } \approx 0 \forall i$ . In practice, we learn a separate rescaling function for each target class of the model’s training corpus $\mathfrak { X }$ , i.e., $\Omega _ { \omega , c } ( \cdot ) \forall c \in C$ . This accounts for class imbalance and different feature distributions across classes.
+
+# Meta Learning from Noisy Data
+
+To increase robustness towards noisy training data in a meta learning setting, one uses a clean validation set for the meta update. The difference in distributions between training and meta validation set allows the model to learn a reweighting of data that is closer to the validation data distribution, thereby converging to a model better suited for such data. In contrast, STORM operates without the need for access to clean data. Instead, validation batches are randomly sampled directly from the noisy training data at each update step. To establish a difference in data distributions, we rescale the validation loss using the same $\Omega$ that is currently being trained.
+
+The intuition is as follows. The inner and outer loop updates pursue complementary goals, creating a feedback loop that refines and improves weight predictions and model performance. The outer loop minimizes the total validation loss by rescaling the validation sample loss weights, which is most efficient if the loss of outlier samples is downscaled. Concurrently, the outer loop updates the weights used in the inner loop such that the model update is becoming more beneficial w.r.t. performance on the validation set. Successful joint training of the model and minimization of the meta loss depend on increasing the weights of beneficial samples while decreasing those of less useful ones. Batch normalization plays a critical role in this process, as it prevents the predicted weights in the outer loop from collapsing to zero. As the model utilizes more informative samples in the inner loop, weighting in the outer loop becomes more accurate. Conversely, as the outer loop downscales outlier samples, the model training increasingly focuses to minimize the validation loss of non-outlier samples.
+
+# Differences to AGRA
+
+AGRA is closely related to our work. It dynamically evaluates the utility of each training sample, making binary decisions at every training step based on the sample’s prediction error. AGRA’s decisions regarding individual samples may change as training progresses and are solely based on the gradients of the model being trained. AGRA assumes noisy data $\mathfrak { X }$ . It defines a comparison loss function $\tilde { \mathcal { L } } ( x , y )$ for computing comparison gradients. For each $\mathfrak { B }$ , a comparison batch ${ \mathfrak { B } } _ { \mathrm { c o m p } }$ is sampled from $\mathfrak { X }$ . The sample gradients’ similarity to the aggregated comparison gradient is:
+
+$$
+\sin ( i ) = \frac { \nabla \tilde { \mathcal { L } } ( x _ { i } , y _ { i } ) \cdot \nabla \tilde { \mathcal { L } } ( \mathfrak { B } _ { \mathrm { c o m p } } ) } { | | \nabla \tilde { \mathcal { L } } ( x _ { i } , y _ { i } ) | | _ { 2 } \cdot | | \nabla \tilde { \mathcal { L } } ( \mathfrak { B } _ { \mathrm { c o m p } } ) | | _ { 2 } } .
+$$
+
+The assumption is: if gradients point in opposing directions, the sample may be harmful to model training given it’s current state. $\theta$ is updated w.r.t. $\mathfrak { B } ^ { \prime } = \{ ( x _ { i } , y _ { i } ) \ \bar { | } \bar { \mathrm { s i m } } ( i ) \leq 0 \}$ .
+
+Differences between our approaches include AGRA being gradient-based, requiring forward and backward passes for outlier removal, and applying a similarity measure for binary decisions. AGRA does not use meta learning, requires comparison batch sampling, and uses a class balancing heuristic. STORM avoids extra backward passes, uses a learnable, meta-trained, data-driven rescaling function with continuous predictions. It does not require sampling a comparison batch, and uses a memory for balanced class-dependent statistics instead. The similarities make both methods directly comparable, with distinctions likely affecting filtering and final model performance.
+
+# Computational Complexity
+
+STORM adds minimal computational overhead compared to regular meta learning. It involves two forward (Fig. 1, steps 1 & 3) and two backward (steps 2 & 4b) passes, plus a backward-on-backward (step 4a) pass, with feature computations during steps 1 and 3 being negligible. Overall, meta learning has about triple the computational needs as regular training. Depending on $G$ , steps 1 and 3 perform further computationally efficient forward passes through $\Theta$ without building a gradient graph. The rescaling function $\Omega$ is a small multi-layer perceptron requiring negligible extra memory and computational resources. Meta learning significantly increases memory consumption due to gradient graph unrolling, roughly doubling memory usage with a single inner loop traversal. Maintaining the memories ${ \mathfrak { M } } _ { ( \cdot ) }$ for feature computation is negligible.
+
+# Use Case: Dialogue State Tracking
+
+A dialogue is a sequence of turns $\{ ( U _ { i } , M _ { i } ) \} _ { i = 1 } ^ { T }$ , where $U _ { i }$ is a user utterance and $M _ { i }$ a preceding system utterance in natural language. Concepts of relevance for tracking are typically described in an ontology on the levels of domain (e.g., restaurant), slot (e.g., name) and value (e.g., Rosa’s). In dialogue modeling, dialogue state tracking (DST) is the task of predicting user’s intent from natural language input and keeping track of user’s goal throughout the conversation as part of a dialogue state (Young et al. 2010). That is, DST predicts at each turn the presence of domain-slot pairs $\{ S _ { i } \} _ { i = 1 } ^ { \bar { S } }$ , their values, and updates the dialogue state. Accurate DST is crucial for high-performing dialogue systems. While specialized systems outperform LLM-based solutions in knowledge and privacy-intensive tasks, they require data with finegrained and consistent labels (Shen et al. 2024).
+
+Dialogue datasets can be grouped into machine-machine, machine-human and human-human categories. The latter is preferable for modeling human behavior but comes with the highest labeling costs and requirements. The Wizard-of-Oz (WOZ) framework (Kelley 1984) generates and labels natural human-human interactions and has produced a range of widely used datasets (Wen et al. 2017; Budzianowski et al. 2018) for developing task-oriented dialogue systems (Balaraman, Sheikhalishahi, and Magnini 2021).
+
+Despite rigorous selection of annotators, dialogue annotation presents significant challenges, especially w.r.t. consistency on intra- and inter annotator level (Stolcke et al. 2000; Traum 2000). According to Budzianowski et al. (2018), annotating dialogue acts, which consist of an intent and a domain-slot-value triplet, is the most challenging part of dialogue data collection. Errors in dialogue act annotations typically lead to errors in dialogue state annotations, both crucial for dialogue system development. Estimates for erroneous labels in MultiWOZ 2.1 (Budzianowski et al. 2018) – one of the most widely used dialogue benchmarks – range from $17 \%$ on dialogue state, $22 \%$ on slot, $31 \% - 4 1 \%$ on turn and $2 8 \% - 6 5 \%$ on dialogue level. Despite rigorous labeling processes, considerable noise remains in the dataset.
+
+# DST with TripPy
+
+We employ a triple copy strategy DST (TripPy) (Heck et al. 2020). The intuition is that values are either directly expressed by the user and can be extracted from context (span), values are mentioned by the system and indirectly referred to by the user and therefore can be retrieved from the system output (inform), or values are coreferences to concepts that were mentioned earlier and can therefore be copied over (refer). The special value dontcare is to represent user’s indifference, true and false are for Boolean slots, and none is the empty slot. A slot gate decides which of these mechanisms or special values to use for filling a slot. Slot gates are implemented as individual classification heads on top of an encoder, analogous to Eq. 3. The total loss for one training example is a combination of various classification losses. Each of TripPy’s various classification tasks requires their own set of labels. A labeling error occurring during any of the partial loss computations affects the total sample loss $\mathscr { L } _ { i }$ and therefore the utility of that entire sample.
+
+We focus on the most influential component for loss rescaling, the slot gates, which predict whether and how $S _ { i }$ need to be filled. If a slot gate makes a faulty prediction, the predictions of span and refer heads become irrelevant. Therefore, we rescale the sample losses as follows:
+
+$$
+\mathcal { L } _ { i } ^ { ' } = \sum _ { s = 1 } ^ { S } \alpha \cdot \Omega _ { \omega } ( \pmb { f } _ { s , i } ) \cdot \mathcal { L } _ { s , i } ^ { \mathrm { g a t e } } + \beta \cdot \mathcal { L } _ { s , i } ^ { \mathrm { s p a n } } + \gamma \cdot \mathcal { L } _ { s , i } ^ { \mathrm { r e f e r } } .
+$$
+
+# Experiments
+
+# Datasets
+
+We train and evaluate on three types of NLP classification datasets. Youtube (Alberto, Lochter, and Almeida 2015) and SMS (Almeida, Hidalgo, and Yamakami 2011) are spam detection benchmarks. We encode the samples for these two datasets with fixed TF-IDF vectors. MRPC, CoLA and RTE are members of the GLUE benchmark (Wang et al. 2018) and cover the tasks of paraphrase, linguistic acceptability and textual entailment detection, respectively. We introduce $10 \%$ to $40 \%$ random label noise into the training portions of these datasets to simulate noisy labels. MultiWOZ 2.4 (Ye, Manotumruksa, and Yilmaz 2022) is a task oriented dialogue modeling benchmark that takes the training set of MultiWOZ 2.1, but provides rigorously cleaned validation and test sets. Its noise stems mainly from inter-annotator inconsistencies and systematic intra-annotator mistakes w.r.t. to the labeling instructions, making labels frequently ambiguous. The datasets we selected vary in size, balance, sparsity and complexity, and thus provide individual challenges to our approach. The YouTube, SMS, CoLA, MRPC, and RTE datasets each contain two classes and include $10 \%$ - $40 \%$ symmetric noise. The datasets consist of 1.6K, 4.5K, 8.5K, 6.7K, and 2.5K samples, respectively. Among these, only the YouTube dataset does not exhibit class imbalance. The MultiWOZ dialogue dataset spans 7 domains, contains
+
+$20 \%$ real noise, has 56.8K samples, and is affected by class imbalance.
+
+# Evaluation
+
+As performance metrics for the model, we use accuracy for balanced data, F1 score for imbalanced data, Matthew’s correlation for the CoLA benchmark and joint goal accuracy (JGA) for DST on MultiWOZ. JGA is the ratio of dialogue turns for which all slots were filled with the correct value according to the dialogue state labels (including the none value). We run each experiment 10 (for MultiWOZ 5) times with random seeds. We report averages, standard deviation and statistical significance of the results. We perform model selection given the validation sets and test on the test sets. For GLUE benchmarks, no test sets are available, therefore we use 2-fold cross-validation using the validation sets. We perform an ablation study on data with a uniform noise ratio of $30 \%$ and on data with real noise.
+
+# Training and Inference
+
+We initialize $\operatorname { E n c } ( { \mathord { \cdot } } )$ with RoBERTa-base (Liu et al. 2019). All tasks are trained with cross-entropy loss using the Adam optimizer (Kingma and Ba 2015). During backpropagation, we also pass through $\operatorname { E n c } ( { \mathord { \cdot } } )$ . Optimal learning rates are determined via grid search on the original clean datasets. MultiWOZ experiments are an exception due to the lack of a clean training dataset. Learning rates are constant except for MultiWOZ, where we employ a linear schedule with $10 \%$ warmup. Maximum epochs are 10 with early stopping based on validation performance. Batch sizes $B$ are 48 for MultiWOZ and 32 for the other datasets. The dropout rate for the transformer encoder is $10 \%$ . Since the experiments with TFIDF features do not utilize an encoder, we directly dropout the features at the same rate. To isolate the effect of rescaling, we maintain the same setup and dataset specific hyperparameters unrelated to rescaling for all experiments. Any changes in performance can therefore be directly attributed to the rescaling. We performed a simple hyperparameter search for meta learning across all corpora so as to avoid task-specific tuning. We found no statistically significant improvements with alternative hyperparameter values. We found that using the full set of features for $\Omega$ leads to most consistent results, compared to using subsets. To minimize computational overhead, we set $G = 3$ and pass through the inner loop of meta learning once per training step. We set $m _ { \mathrm { { s i z e } } } = B$ . As baseline, we use AGRA with cross-entropy as comparison loss and without weighted sampling (Sedova, Zellinger, and Roth 2023).
+
+# Clean vs. Noisy Labels
+
+An experiment often neglected is testing the effect of loss rescaling on clean data. We observed that STORM does not significantly affect training on non-noisy data, i.e., performance is not diminished (Tab. 2). For comparison, AGRA at times diminishes performance on clean data, likely due to over-filtering. Our approach merely rescales losses and can therefore utilize all samples. Fig. 2c shows that loss weights increase over time, leading to a higher impact of individual samples later in training.
+
+<html><body><table><tr><td></td><td>Youtube (Acc.)</td><td>SMS (F1)</td><td>CoLA (Matth.)</td><td>MRPC (F1)</td><td>RTE (F1)</td><td>MultiWOZ (JGA)</td><td>Avg.</td></tr><tr><td colspan="8">Clean labels</td></tr><tr><td>No rescaling</td><td>93.4±0.3</td><td>93.7±1.3</td><td>62.0±1.8</td><td>91.7±1.1</td><td>78.9±1.9</td><td>/</td><td>83.9</td></tr><tr><td>AGRA</td><td>94.0±0.3↑</td><td>93.6±0.6</td><td>58.2±2.1</td><td>90.7±0.8</td><td>74.8±1.7</td><td>/</td><td>82.3</td></tr><tr><td>STORM (ours)</td><td>93.8±0.7</td><td>92.1±2.3</td><td>61.6±1.2</td><td>91.2±0.9</td><td>77.3±2.2</td><td>/</td><td>83.2</td></tr><tr><td colspan="8">Noisy labels</td></tr><tr><td>No rescaling</td><td>92.9±0.7</td><td>76.9±0.5</td><td>57.3±1.7</td><td>89.7±1.0</td><td>73.0±2.2</td><td>/</td><td>78.0</td></tr><tr><td>STORM (ours)</td><td>93.5±0.4↑</td><td>88.1±1.0↑</td><td>59.3±1.7</td><td>90.5±1.0</td><td>73.7±2.0</td><td>/</td><td>81.0</td></tr><tr><td colspan="8">Noisy labels</td></tr><tr><td>No rescaling</td><td>92.9±1.1</td><td>71.6±3.2</td><td>(uniform noise 20%) 52.6±2.6</td><td>87.4±1.7</td><td>71.4±2.5</td><td>/</td><td>75.2</td></tr><tr><td>STORM (ours)</td><td>93.6±0.9</td><td>85.3±1.3↑</td><td>55.4±1.3↑</td><td>89.3±1.2↑</td><td>72.6±2.0</td><td>/</td><td>79.2</td></tr><tr><td colspan="8">Noisy labels</td></tr><tr><td>No rescaling</td><td>89.5±1.5</td><td>63.6±4.5</td><td>(uniform noise 30%) 49.8±2.5</td><td>84.6±2.1</td><td>67.9±1.6</td><td>(real noise) 65.0±0.8</td><td>70.1</td></tr><tr><td>AGRA</td><td>89.7±2.0</td><td>70.0±4.5</td><td>47.7±3.2</td><td>85.9±2.9</td><td>68.9±0.5↑</td><td>62.1±0.6</td><td>70.7</td></tr><tr><td>Meta learning w/ clean val.</td><td>89.1±2.1</td><td>74.9±7.1↑</td><td>49.6±3.1</td><td>86.2±1.5↑</td><td>69.1±1.6↑</td><td>70.6±1.7个</td><td>73.3</td></tr><tr><td>STORM (ours)</td><td>91.0±0.7↑</td><td>82.3±3.1↑</td><td>51.8±2.1↑</td><td>86.8±1.2</td><td>68.9±2.7</td><td>67.1±0.7</td><td>74.7</td></tr><tr><td>w/ binary rescaling</td><td>92.5±1.0↑</td><td>15.3±24.7</td><td>0.0±0.0</td><td>83.9±2.7</td><td>69.4±1.9↑</td><td>67.4±0.7个</td><td>54.8</td></tr><tr><td>w/ 2 inner loops</td><td>89.6±1.3</td><td>84.2±2.7</td><td>51.9±2.8↑</td><td>87.8±1.7个</td><td>67.3±4.0</td><td>61.1±6.8</td><td>73.7</td></tr><tr><td>w/10 forward passes</td><td>92.1±0.7</td><td>83.4±3.0↑</td><td>53.2±2.6↑</td><td>87.3±1.6↑</td><td>70.1±2.3↑</td><td>62.9±2.7</td><td>74.8</td></tr><tr><td>w/o class separation</td><td>91.9±0.7个</td><td>84.7±1.0↑</td><td>51.0±2.6</td><td>87.1±1.9↑</td><td>69.2±2.2↑</td><td>64.5±1.5</td><td>74.7</td></tr><tr><td>w/o extra features</td><td>90.6±1.5</td><td>83.6±2.0↑</td><td>50.2±2.0</td><td>86.7±1.6</td><td>68.9±2.2</td><td>39.2±18.6</td><td>69.9</td></tr><tr><td>w/o meta learning</td><td>86.5±1.9</td><td>73.3±7.5</td><td>48.1±4.7</td><td>85.7±2.5</td><td>68.7±0.9</td><td>65.0±0.9</td><td>71.2</td></tr><tr><td>w/o meta loss rescaling</td><td>87.6±2.5</td><td>65.5±4.8</td><td>48.8±3.3</td><td>84.6±1.0</td><td>69.2±2.5↑</td><td>66.3±1.1↑</td><td>70.3</td></tr><tr><td colspan="8">(uniform noise 40%)</td></tr><tr><td>No rescaling</td><td>81.8±3.7</td><td>48.6±3.7</td><td>41.6±3.2</td><td>81.1±0.8</td><td>67.6±1.8</td><td>/</td><td>64.1</td></tr><tr><td>STORM (ours)</td><td>83.6±2.5</td><td>64.9±4.1↑</td><td>42.8±2.9</td><td>81.6±0.9</td><td>68.8±0.5↑</td><td>/</td><td>68.3</td></tr></table></body></html>
+
+Table 2: Model performance. $\Uparrow / \uparrow$ and $\Downarrow / \downarrow$ indicate significant $p \ll 0 . 0 1$ vs. $p < 0 . 0 5$ ) differences to no rescaling.
+
+STORM significantly outperforms training on noisy data in all our experiments (Tab. 2). The largest gain is observed on the TF-IDF encoded SMS dataset, where STORM improves performance by $1 9 \% - 2 1 \%$ absolute. Transformerencoder based models likewise perform considerably better, especially in the challenging MultiWOZ DST task. While AGRA improves some models, it tends to harm the DST model compared to simply training on noisy data.
+
+# Rescaling vs. Removal
+
+Since AGRA performs binary loss rescaling, we implemented a binary version of STORM for comparison. Our alternative approach underperforms compared to AGRA and standard STORM (Tab. 2, “STORM w/ binary rescaling”). Although binary STORM achieves good results on some benchmarks, e.g., Youtube, it fails on others such as SMS and CoLA.
+
+Hard filtering of samples risks losing critical information, preventing the model from escaping unfavorable parameter regions. If this happens early in the training, $\Theta$ ’s signals to $\Omega$ become uninformative, breaking their feedback loop. Hard filtering data changes its distribution, which violates the i.i.d. assumption in sampling batch $\mathfrak { B } _ { \mathrm { v a l } }$ for the meta update. This causes an imbalance that is hard to recover from. AGRA avoids this issue, likely because it is gradient based and not error based, and uses a threshold on a similarity measure instead of learning a rescaling or filtering function.
+
+# Noisy vs. Clean Validation Signal
+
+Sampling ${ \mathfrak { B } } _ { \mathrm { v a l } }$ from a clean validation set, contrary to expectations, did not generally improve rescaling quality or model performance. In fact, meta loss rescaling in the outer loop of meta learning was detrimental. Tab. 2 reports model performance when meta learning $\Omega$ without meta loss rescaling and without considering $\nabla _ { \mathrm { o u t e r } } \omega$ (Tab. 2, “Meta learning w/ clean val.”).
+
+Using clean validation data, We observed a significant improvement only in DST, but not in simpler NLP tasks. This is due to the nature of the dataset noise. For uniform noise, clean validation data offers no extra benefit beyond what we
+
+100% -80% Clean, 1 Noisy samples in 90% Clean label acc. $3 5 \%$ STORM, noisy data -40% idNno.iw.s.ny,scaled first 0,78 nCloeisayndsatma ples in 780% N%oSisaymlaplbesl/abicnc. 30% SATGORRA,Mcn,loecilaseynadndadtata   
+80% downscaled first Samples in clean 60% 25%   
+60% 3 0% 2 i3n4. 5 6 7 8 9 10 0,45 data 50% 40% 20%   
+40% 15% 40% 30% STORM: AGRA: Clean,   
+20% Ep. 1 X Ep. 1 downscaled last 20% 10% Ep. 25 Ep. 2510 60% dNo iwsny,scaled last 0,3 0% 5% 0% 00 20 00 300 3 80% in ... 0,2 1 2 3 4 5 6 7 8 9 10 0% 1 2 3 4 5 6 7 8 9 10 FPR Epoch Epoch Epoch (a) Rescaling ROC (b) Filter timing (c) Weight progression (d) Model calibration (e) Calibration error
+
+can learn from noisy data, since randomly noised samples do not exhibit a pattern. Consequently, we did not see statistically significant differences in performance between using clean and noisy validation signals. In the DST experiments on the MultiWOZ data, which contains real noise, the clean data proves helpful to handle non-random biases from human labeling.
+
+# Ablation
+
+Do we need meta learning? Meta learning is essential for learning a loss rescaler from noisy labels. Without it, performance remains similar to conventional training on noisy data (Tab. 2, “STORM w/o meta learning”), mainly due to overfitting to noise. As $\Theta$ overfits, without meta learning $\Omega$ cannot distinguish between good and noisy samples effectively due to their features $f _ { i }$ being increasingly indistinguishable, causing over-filtering of correct samples.
+
+Do we need meta loss rescaling? Without combining $\nabla _ { \mathrm { m e t a } } \omega$ and $\nabla _ { \mathrm { o u t e r } } \omega$ for updating $\omega$ (Tab. 2, “STORM w/o meta loss rescaling”), the loss rescaler remains conservative in its estimates, leading to only a small gap between weights for clean and noisy samples. Meta loss rescaling ensures a much clearer differentiation (Fig. 2c). Without the complementary goals of inner and outer loop w.r.t. updating $\omega$ , optimization would simply minimize the loss of the noisy validation data, leading to overfitting $\Theta$ and uninformative $f _ { i }$ .
+
+Do we need more than loss as features? While STORM can work with only sample loss as a feature $( \pmb { { f } } _ { i } = \ b { { \ell } } _ { i } )$ on symmetric noise benchmarks (Tab. 2, “STORM w/o extra features”), it underperforms on real noise. The additional features we compute are complementary to the sample loss and evidently help identify non-random biases in the data.
+
+Do we need class dependent rescaling? Target class dependent $f _ { i }$ and $\Omega$ had no impact on simpler benchmarks with moderate or no class imbalance (Tab. 2, “STORM w/o class separation”). In the DST use case, however, class dependent rescaling was critical to achieve good performance. In MultiWOZ, class imbalance is extreme, leading to different class statistics. Joint rescaling would categorically downscale underrepresented classes, rather than individual outliers.
+
+Is “more” better? More inner loop traversals before an outer loop update did not improve performance, but considerably increased training time and memory consumption (Tab. 2, “STORM w/ 2 inner loops”). More gradient-free forward passes for richer statistics in $f _ { i }$ slightly improved performance but the benefit was disproportionally small compared to the increased cost (Tab. 2, “STORM w/ 10 forward passes”).
+
+# Use Case: DST with TripPy
+
+Our use case is representative of dialogue modeling tasks heavily affected by noisy data. Applying STORM to train TripPy DST for MultiWOZ with its estimated $20 \% - 4 0 \%$ noise improved performance by over $2 \%$ JGA absolute.
+
+STORM shows slower training convergence but higher peak performance, indicating it avoids overfitting. Regular training, however, tends to overfit to data noise. Our baseline, AGRA, does not outperform regular training, possibly because it only considers classification head gradients due to memory constraints and does not distinguish target classes, unlike STORM.
+
+Our approach consistently improves performance across all classes in MultiWOZ $+ 1 \%$ F1, $+ 4 \%$ recall), particularly dontcare $+ 5 \%$ F1, $+ 8 \%$ recall), an inconsistently labeled class, and refer $+ 1 \%$ F1, $+ 9 \%$ recall), the most challenging class, both being underrepresented.
+
+# Analysis
+
+STORM keeps improving As meta learning progresses, STORM’s loss rescaling function gradually improves in identifying noisy samples. Fig. 2a plots the ROC curve of $\Omega$ averaged over all benchmarks. STORM continues learning from $\Theta$ throughout training, unlike our baseline, which maintains stable true/false positive rates.
+
+Table 3: Examples of samples with label errors or ambiguities, as well as varying degrees of perceived difficulty. See Fig. 3 for an illustration of STORM’s observed loss rescaling trends based on sample correctness and difficulty.   
+
+<html><body><table><tr><td>#</td><td>User at t +1</td><td>System at t</td><td>Label</td></tr><tr><td>1</td><td>Iam leaving on Friday.What is the cost please?</td><td>What day are you taking the train?</td><td>none (wrong)</td></tr><tr><td>2</td><td>It does not need internet included</td><td>Do you have any additional preferences?</td><td>dontcare (ambiguous)</td></tr><tr><td>3</td><td>It does not matter.I'm looking for a nice museum.</td><td>What area of town were you looking to visit?</td><td>dontcare (hard)</td></tr><tr><td>4</td><td>Yes,Ineed some information on Rosa's B&B.</td><td>Is there anything else?</td><td>Rosa's B&B (easy)</td></tr></table></body></html>
+
+STORM downscales noise consistently Fig. 2b shows that most downscaled samples, clean and noisy, are downscaled early on in training. The difference in downscaling behavior w.r.t. clean and noisy samples emerges as training progresses. Clean samples that were (wrongly) downscaled early in training stop being downscaled in later epochs. In contrast, noisy samples remain consistently downscaled until the end of training. A notable number of clean samples are downscaled throughout training, typically being ambiguous cases or from underrepresented groups of samples.
+
+STORM creates a learning schedule STORM tends to (1) increase the gap between loss weights for clean and noisy samples over time, (2) downscale noisy samples faster than upscale clean ones, and (3) increase average loss weights across all samples (Fig. 2c). These indicators suggest a learning schedule where noise is discarded early, and challenging clean samples are increasingly considered. Some previously discarded samples, likely ambiguous or hard cases, are reconsidered later in training.
+
+STORM prevents overfitting Figures 2d-e show how STORM reduces $\Theta$ ’s tendency to overfit noise. The calibration histogram indicates that a model trained with STORM maintains good calibration for clean sample labels but not for noisy labels, evidencing a resistance to overfitting. Fig. 2e plots the expected calibration error (ECE) and shows that STORM avoids overfitting to noisy samples, unlike our baseline.
+
+STORM reveals patterns Our qualitative analysis reveals patterns based on a sample’s correctness or difficulty. Exemplarily, Fig. 3 illustrates STORM’s behavior on MultiWOZ for the examples listed in Tab. 3.
+
+# Limitations
+
+We observed that the potential risk of confirmation bias in applying STORM using noisy validation data is heightened by two factors. First, samples of a particular class that are consistently labeled incorrectly have a higher risk to be wrongly down- or upscaled due to the training gradually learning to consider the wrong label(s) to be correct. Second, severely under-represented classes have a higher risk of being wrongly down- or upscaled if a particular rescaling trend is established for these samples early in the training and then reinforced throughout the remainder of the training. Both these risks we observed for the dontcare class in our use case for DST on MultiWOZ data, which is known to be a particularly difficult labeling task.
+
+![](images/e34e39db2ed8b9c0a3479c5507f52445a4f09bdffd9b8264016140d5b2128f77.jpg)  
+Figure 3: Examples of STORM’s observed loss rescaling trends based on sample correctness and difficulty (see Tab. 3). #1: A wrongly labeled sample is discarded consistently after initial consideration in the first epoch. #2: An ambiguous sample is initially ignored, then gradually upscaled. #3: A clean but hard sample sees its loss weight increased steadily from mid-training. #4: A clean and easy sample has its high initial loss weight reduced due to decreasing informativeness.
+
+# Conclusion
+
+In conclusion, our self-taught on-the-fly meta loss rescaling demonstrates efficiency in learning from noisy labels, without the need for clean validation data. Our novel metalearning scheme dynamically rescales losses in a flexible and computationally efficient approach as it leverages sample losses and prediction probabilities from the model being trained. STORM is robust towards class imbalances and different noise types, as shown by extensive empirical evaluation across various NLP tasks, including dialogue modeling. Remarkably, STORM consistently downscales noisy samples, develops an effective learning schedule, and prevents overfitting by ensuring good calibration for clean sample labels. We see limitations in applying STORM to extremely noisy data, where the clean samples are outnumbered, but consider this a prospective challenge for future work.

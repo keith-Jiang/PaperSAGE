@@ -20,10 +20,10 @@ now = datetime.now()
 formatted_date = now.strftime("%Y%m%d")
 # 存放待处理 PDF 文件的文件夹路径
 # INPUT_FOLDER = f"origin_papers/{formatted_date}"
-INPUT_FOLDER = "origin_papers/aaai-technical-track-on-machine-learning-vi"
+INPUT_FOLDER = "origin_papers/aaai-technical-track-on-natural-language-processing-iii"
 # 存放解析后 Markdown 文件的文件夹路径
 # OUTPUT_FOLDER = f"transferred_papers/{formatted_date}"
-OUTPUT_FOLDER = "transferred_papers/extra_1"
+OUTPUT_FOLDER = "transferred_papers/extra"
 # 您的 MinerU 的 API Token
 API_TOKEN = 'Bearer eyJ0eXBlIjoiSldUIiwiYWxnIjoiSFM1MTIifQ.eyJqdGkiOiI2MjQwMzE5MCIsInJvbCI6IlJPTEVfUkVHSVNURVIiLCJpc3MiOiJPcGVuWExhYiIsImlhdCI6MTc1Mjg0Mzc4NCwiY2xpZW50SWQiOiJsa3pkeDU3bnZ5MjJqa3BxOXgydyIsInBob25lIjoiIiwib3BlbklkIjpudWxsLCJ1dWlkIjoiMzhkZDYzMjAtNzQ3Ny00ZjhjLTgwNTYtMWE0NjliNWUyZDc4IiwiZW1haWwiOiIiLCJleHAiOjE3NTQwNTMzODR9.2MBgX_jgoq6Z6XZLcMoi7YLZuJdQ_Yb2GXRh8SA0KglP0LWQZjUOTsv-xpgrIjCNGf9nBrsyRtg9CmUjIt6g0Q'
 

@@ -13,8 +13,11 @@ logger = logging.getLogger(__name__)
 
 # --- 1. 全局配置区 ---
 CATEGORIES = [
-    "cs.AI", "cs.LG", "cs.CV", "cs.CL", "cs.RO", 
-    "cs.NE", "cs.IR", "cs.DC", "cs.AR", "cs.CR", "cs.ET"
+    "cs.AI", "cs.AR", "cs.CC", "cs.CE", "cs.CG", "cs.CL", "cs.CR", "cs.CV", "cs.CY", 
+    "cs.DB", "cs.DC", "cs.DL", "cs.DM", "cs.DS", "cs.ET", "cs.FL", "cs.GL", "cs.GR",
+    "cs.GT", "cs.HC", "cs.IR", "cs.IT", "cs.LG", "cs.LO", "cs.MA", "cs.MM", "cs.MS",
+    "cs.NA", "cs.NE", "cs.NI", "cs.OH", "cs.OS", "cs.PF", "cs.PL", "cs.RO", "cs.SC",
+    "cs.SD", "cs.SE", "cs.SI", "cs.SY"
 ]
 MAX_PAPERS = 50
 now = datetime.now()

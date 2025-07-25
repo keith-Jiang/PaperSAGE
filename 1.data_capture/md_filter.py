@@ -18,10 +18,10 @@ now = datetime.now()
 formatted_date = now.strftime("%Y%m%d")
 # 存放待处理 PDF 文件的文件夹路径
 # INPUT_FOLDER = f"origin_papers/{formatted_date}"
-INPUT_FOLDER = "origin_papers/aaai-technical-track-on-machine-learning-vi"
+INPUT_FOLDER = "origin_papers/aaai-technical-track-on-natural-language-processing-iii"
 # 存放解析后 Markdown 文件的文件夹路径
 # OUTPUT_FOLDER = f"transferred_papers/{formatted_date}"
-OUTPUT_FOLDER = "transferred_papers/extra_1"
+OUTPUT_FOLDER = "transferred_papers/extra"
 TOKENIZER_PATH = "/home/zhangping/jrz-test/models/sft/Qwen/Qwen2.5-7B"
 
 
@@ -56,7 +56,7 @@ def process_markdown_files(md_folder, pdf_folder, tokenizer_path, summary_prompt
         
     md_files = glob.glob(os.path.join(md_folder, "*.md"))
     
-    sections_to_remove = ["Acknowledgement", "Acknowledgements", "Reference", "References", "Acknowledgment", "Acknowledgments"
+    sections_to_remove = ["Acknowledgement", "Acknowledgements", "Reference", "References", "Acknowledgment", "Acknowledgments",
                           "ACKNOWLEDGEMENT", "ACKNOWLEDGEMENTS", "REFERENCE", "REFERENCES", "ACKNOWLEDGMENT", "ACKNOWLEDGMENTS"]
     
     results = []

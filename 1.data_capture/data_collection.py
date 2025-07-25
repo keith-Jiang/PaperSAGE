@@ -23,7 +23,7 @@ BASE_PATH = Path("/home/zhangping/jrz-test/PaperSAGE/1.data_capture")
 # 根据当前日期或指定日期生成文件夹名称
 # now = datetime.now()
 # DATE_FOLDER = now.strftime("%Y%m%d")
-DATE_FOLDER = "20250722" # 固定日期，方便测试
+DATE_FOLDER = "extra_1" # 固定日期，方便测试
 # 存放待处理的Markdown文件的文件夹路径
 MD_FOLDER = BASE_PATH / "transferred_papers" / DATE_FOLDER
 # 存放最终生成的JSON数据库文件的文件夹路径
@@ -91,7 +91,7 @@ def scrape_arxiv_paper(arxiv_url):
         # 使用正则表达式精确提取所有分类代码，如cs.AI, cs.LG等
         categories_from_page = re.findall(r'cs\.[A-Z]{2,}', subjects_text)
         if not categories_from_page: # 如果正则没匹配到，使用完整文本作为备用
-             categories_from_page = [subjects_text] if subjects_text else ["未找到分类"]
+            categories_from_page = [subjects_text] if subjects_text else ["未找到分类"]
         logger.info(f"从ArXiv页面提取到分类: {categories_from_page}")
 
     except requests.exceptions.RequestException as e:

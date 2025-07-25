@@ -1,0 +1,203 @@
+# Uncertainty-Aware Self-Training for CTC-Based Automatic Speech Recognition
+
+Eungbeom $\mathbf { K i m } ^ { 1 }$ , Kyogu Lee1,2,3
+
+1Interdisciplinary Program in Artificial Intelligence, Seoul National University 2Artificial Intelligence Institute, Seoul National University 3Department of Intelligence and Information, Seoul National University eb.kim, kglee @snu.ac.kr
+
+# Abstract
+
+Uncertainty estimation has been widely applied for trustworthy automatic speech recognition (ASR) systems across training and inference stages. In the training stage, previous studies show that uncertainty can facilitate self-training by filtering out unlabeled data samples with high uncertainty. However, the current sequence-level uncertainty estimation method for connectionist temporal classification (CTC) based ASR models drops the output probability information and depends only on the textual distance of decoded predictions. In this study, we argue that this results in limited performance improvement and propose a novel output probability-based sequence-level uncertainty estimation method. We also categorize uncertainty as pseudo-label uncertainty and in-training uncertainty for the self-training process. Finally, we present uncertainty-aware self-training for CTC-based ASR models and experimentally show the effectiveness of the proposed method compared to the baselines.
+
+# 1 Introduction
+
+Transformer-based models have been successfully adopted in various domains such as language, vision, and audio (Vaswani et al. 2017; Dosovitskiy et al. 2021; Gong, Chung, and Glass 2021). Based on this progress, Transformer has also been popularized in end-to-end automatic speech recognition (ASR) by allowing scalable architectures (Dong, Xu, and $\mathtt { X u 2 0 1 8 }$ ; Baevski et al. 2020; Radford et al. 2023). However, training large ASR models requires a large amount of data samples. Moreover, to fully utilize the generalization ability of Transformer models, simultaneous scaling of the dataset and the architecture is regarded as a key element (Zhai et al. 2022).
+
+Semi-supervised learning leverages unlabeled data to alleviate the limited scalability of labeled data. For instance, self-training aims to train the potent student model by pseudo-labeling unlabeled data using the teacher model at the fine-tuning stage. Due to its simplicity, self-training has been widely applied to various ASR architectures such as connectionist temporal classification (CTC) based models (Chen, Wang, and Wang 2020; Xu et al. 2020; Zhang et al. 2022; Singh, Hou, and Wang 2023; Peng et al.
+
+2024), sequence-to-sequence models (Kahn, Lee, and Hannun 2020; Park et al. 2020; Radford et al. 2023), and RNNTransducer models (Zhang et al. 2022; Hwang et al. 2022).
+
+Since pseudo-labels are estimated by the teacher model at self-training, the student model is easily misguided under the erroneous teacher model. For this reason, Kahn, Lee, and Hannun (2020); Park et al. (2020); Zhang et al. (2022) filter out unreliable pseudo-labels for self-training of ASR models and observe that this prevents performance degradation from the erroneous pseudo-labels and contributes to performance enhancement. Likewise, due to the lack of reliability of the pseudo-labels, pseudo-label filtering for self-training has been widely explored for ASR, including uncertaintybased pseudo-label filtering (Khurana et al. 2021; Khurana, Laurent, and Glass 2022; Dawalatabad et al. 2023).
+
+Uncertainty estimation aims to quantify the reliability of the output prediction. Given this purpose, employing uncertainty estimation is intuitive for measuring the quality of pseudo-labels and filtering pseudo-labels for self-training. Nevertheless, most of the uncertainty estimation methods focus on restricted tasks such as classification or regression and are not directly applicable to a sequence prediction such as ASR (Patel, Allebach, and Qiu 2023). Although Dey et al. (2019); Jiao et al. (2021); Patel, Allebach, and Qiu (2023) employ entropy-based uncertainty during a self-training process on various sequence prediction tasks, they are limited to sequence-to-sequence models.
+
+For Encoder-only ASR models using a CTC mechanism, Vyas et al. (2019) presents an uncertainty estimation method using Monte Carlo Dropout (MCD) (Gal and Ghahramani 2016). In this method, the textual edit distance of the decoded MCD predictions is utilized for uncertainty estimation and Khurana et al. (2021) successfully adopts this method to the self-training process. However, this approach abandons flourishing output probability information and only utilizes the decoded transcriptions for uncertainty estimation. Although the output probability-based uncertainty estimation and its utilization for semi-supervised learning are recently proposed for CTC-based ASR models (Rumberg et al. 2023; Zhu et al. 2023), they focus on token-level uncertainty estimation, not sequence-level uncertainty estimation. In addition, the previous sequence-level uncertainty estimation methods for CTC-based ASR models have mainly focused on model uncertainty, and data uncertainty has hardly been
+
+explored.
+
+To challenge these issues, we introduce the output probability-based sequence-level uncertainty estimation method for CTC-based ASR models, consisting of model uncertainty and data uncertainty. Based on this, we present a novel uncertainty-aware self-training method, UNCAST. UNCAST discriminates reliable and unreliable pseudolabels by the teacher model’s uncertainty. Also, since the proposed uncertainty estimation method is differentiable unlike the textual edit distance-based uncertainty estimation, the student model’s uncertainty is easily adaptable to the training loss. Thus, UNCAST incorporates the teacher and the student model’s uncertainty estimation results for the uncertainty-aware self-training loss, different from the previous uncertainty-based self-training methods (Khurana et al. 2021; Khurana, Laurent, and Glass 2022; Dawalatabad et al. 2023) focusing only on the teacher model’s uncertainty. We observe that the proposed method has a fine-grained uncertainty estimation compared to the textual edit distancebased uncertainty estimation. Building upon this advantage, we observe the effectiveness of UNCAST for semisupervised learning, particularly within the self-training process. To fully exploit the proposed method, we additionally employ iterative unlabeled data refinement similar to the traditional self-training methods and confirm the extra performance improvement.
+
+# 2 Related Work
+
+# 2.1 Self-Training
+
+Self-training has been widely studied to train the student model using unlabeled data. In self-training, the predictions of the teacher model are regarded as pseudo-labels, and then the student model is trained with the labeled dataset and the pseudo-labeled dataset originating from the unlabeled dataset. However, the student model is misled into undesirable confirmation bias where the pseudo-labels are incorrect. Previous self-training methods study two lines of approaches to handle this issue, namely, estimating reliable pseudo-labels (Laine and Aila 2017; Tarvainen and Valpola 2017) and filtering unreliable pseudo-labels (Xie et al. 2020; Sohn et al. 2020; Zhang et al. 2021). These approaches have also been studied for ASR. Specifically, Manohar et al. (2021); Higuchi et al. (2021) utilize a moving average model for the teacher model and Park et al. (2020); Higuchi et al. (2021); Khurana et al. (2021) adopt beam search to generate accurate pseudo-labels. In addition, Tripathi et al. (2024) proposes a Monte Carlo selftraining method for pseudo-label sampling. Various pseudolabel filtering methods for ASR self-training have also been studied. For instance, Park et al. (2020) proposes a gradual filtering threshold relaxation method. Also, Dey et al. (2019) compares confidence and entropy for filtering criterion, and Khurana et al. (2021); Dawalatabad et al. (2023); Khurana, Laurent, and Glass (2022) explore uncertaintydriven pseudo-label filtering. Likewise, uncertainty estimation is applied to filtering unreliable pseudo-labels because pseudo-label quality can be evaluated by uncertainty of the teacher model’s prediction without the need for a groundtruth label. Thus, in this work, we focus on a pseudo-label filtering method using uncertainty estimation.
+
+# 2.2 Uncertainty Estimation
+
+Sequence-level uncertainty estimation has been broadly studied across various sequence prediction tasks such as machine translation (Zhou et al. 2020; Jiao et al. 2021) or text recognition (Patel, Allebach, and Qiu 2023) for selftraining. For CTC-based ASR models, Vyas et al. (2019) introduces the uncertainty estimation method which is a variant of Monte Carlo Dropout (MCD) (Gal and Ghahramani 2016). This method estimates uncertainty based on a textual edit distance of the decoded sequence predictions from the Dropout implementations at the inference stage and is successfully applied to pseudo-label filtering for the selftraining process (Khurana et al. 2021; Dawalatabad et al. 2023; Khurana, Laurent, and Glass 2022). These approaches for CTC-based ASR uncertainty estimation focus on model uncertainty, which denotes uncertainty from model parameters. However, uncertainty of the model prediction is also affected by data uncertainty which stems from inherent noise within the data itself (Kendall and Gal 2017). Also, the textual edit distance does not fully utilize output probabilitylevel information. To address these issues, we aim to propose an output probability-based data uncertainty estimation method and model uncertainty estimation method for CTCbased ASR models in this study.
+
+# 3 Background
+
+# 3.1 Connectionist Temporal Classification
+
+ASR models aim to translate an input utterance $x$ into a transcription $y$ . Although an input-transcription alignment is unknown in the training dataset, a Transformer encoder-based ASR model can be efficiently trained with the CTC framework (Graves et al. 2006). A CTC output probability of a label transcription given an input utterance is defined as follows:
+
+$$
+P _ { \mathrm { C T C } } ( y | f ( x ) ) : = \sum _ { a \in \beta ^ { - 1 } ( y ) } P ( a | f ( x ) ) ,
+$$
+
+where $f ( \cdot )$ is a model which outputs the frame-level output probability, $a$ is an frame-level alignment, and $\beta ^ { - 1 } ( y )$ denotes a possible alignment set of $y$ . That is, CTC enables us to estimate the probability of the label given the input by the sum of the probabilities for every possible alignment. Based on this, the CTC loss function $\mathcal { L } ( \cdot )$ is defined as follows:
+
+$$
+\mathcal { L } ( x , y , f ) = - \log P _ { \mathrm { C T C } } ( y | f ( x ) ) .
+$$
+
+Since the CTC loss function is easily computed by the forward-backward algorithm, the Transformer encoderbased ASR models are efficiently trained with the CTC algorithm.
+
+# 3.2 Self-Training
+
+Self-training based semi-supervised learning is designed to train the student model $f ^ { S }$ utilizing a pseudo-labeling process for an unlabeled dataset. In this study, we consider the Noisy Student (Xie et al. 2020) method, which is a popular self-training framework. In the first stage, the teacher model $f ^ { T }$ is trained on the labeled dataset $L$ , and the trained teacher model is applied to pseudo-labeling the unlabeled data samples. Then, the student model is trained on the labeled dataset and the unlabeled dataset with pseudo-labels. In this stage, noise based on Dropout (Srivastava et al. 2014) and SpecAugment (Park et al. 2019) is injected into the student model, unlike the unnoised teacher model for accurate pseudo-labeling. The total self-training loss $\mathcal { L } _ { \mathrm { S T } }$ for the student model is formulated as follows:
+
+![](images/0d4efcd06379d479ae57414b420d1e34edd9aec521be7555cecc9ac3dbd57e5d.jpg)  
+Figure 1: Overview of the proposed uncertainty-aware self-training framework, UNCAST. UNCAST includes two types of uncertainty-aware loss. For the labeled dataset, intraining uncertainty of the student model is utilized to augment the loss function. For the unlabeled dataset, the loss function is augmented from pseudo-label uncertainty originating from the teacher model and in-training uncertainty of the student model.
+
+$$
+\begin{array} { c } { \displaystyle \mathcal { L } _ { L } = \frac { 1 } { | L | } \sum _ { x _ { l } \in L } \mathcal { L } ( x _ { l } , y _ { l } , f ^ { S } ) , } \\ { \displaystyle \mathcal { L } _ { U } = \frac { 1 } { | U | } \sum _ { x _ { u } \in U } \mathcal { L } ( x _ { u } , \hat { y } ( x _ { u } , f ^ { T } ) , f ^ { S } ) , } \\ { \displaystyle \mathcal { L } _ { S \mathrm { T } } = \mathcal { L } _ { L } + \lambda \mathcal { L } _ { U } , } \end{array}
+$$
+
+where $ { \mathcal { L } } _ { L }$ is the loss for the labeled dataset $L$ , $\mathcal { L } _ { U }$ is the loss for the unlabeled dataset $U$ , ${ \hat { y } } ( x , f ^ { T } )$ is the output transcription from the teacher model $f ^ { T }$ , and $\lambda$ is a hyperparameter. Since unlabeled data $x _ { u }$ does not have a paired transcription, the pseudo-labeling process $\hat { y } ( x , f ^ { T } ) \stackrel { \bullet } { = } \operatorname * { d e c o d e } ( f ^ { T } ( \stackrel { \bullet } { x } ) )$ is applied where decode $( \cdot )$ denotes a decoding process such as greedy decoding or beam search.
+
+# 4 Method
+
+# 4.1 Data Uncertainty
+
+In this study, we propose an output probability-based sequence-level uncertainty for CTC-based ASR models, which consists of data uncertainty and model uncertainty following Kendall and Gal (2017). For CTC-based ASR models, Rumberg et al. (2023) estimates frame-level uncertainty as the sum of the frame’s output probabilities by which the decoded output sequence is changed. By extending this, we present sequence-level data uncertainty $u _ { d }$ based on the sequence probability by which the output sequence $\hat { y } ( x , f )$ is changed given the input $x$ and the model $f$ , i.e., $\bar { 1 } - \bar { P ( y ( x , f ) | f ( x ) ) }$ . Since prediction confidence of CTCbased ASR models can be modeled by CTC probability modeling, accordingly, uncertainty estimation by the proposed method is efficiently computed by the CTC loss function where the label $y$ is replaced by the decoded output sequence prediction $\boldsymbol { \hat { y } } ( \boldsymbol { x } , f )$ . Finally, by removing the constant and applying logarithmic-scale probability, sequence-level data uncertainty is formulated as follows:
+
+$$
+u _ { d } ( x , f ) = - \frac { 1 } { | \hat { y } ( x , f ) | } \log P _ { \mathrm { C T C } } ( \hat { y } ( x , f ) | f ( x ) ) .
+$$
+
+We normalize the length of the decoded output sequence to minimize the effect of the sequence length. The proposed method is also similar to the perplexity-based sequence-level data uncertainty estimation introduced in Zhou et al. (2020) and the confidence-based data uncertainty estimation (Lakshminarayanan, Pritzel, and Blundell 2017; Mukhoti et al. 2023; Sun et al. 2022).
+
+# 4.2 Model Uncertainty
+
+Model uncertainty denotes uncertainty originating from model parameters. To capture model uncertainty, MCD (Gal and Ghahramani 2016) has been widely applied due to its simplicity and effectiveness. MCD approximates Bayesian inference with Dropout (Srivastava et al. 2014) at the inference stage and utilizes its variance to estimate model uncertainty. Based on this, Vyas et al. (2019) explores model uncertainty estimation for CTC-based ASR models. They measure the maximum textual edit distance between the decoded output sequence without Dropout and the decoded output sequences sampled multiple times from Monte Carlo Dropout without considering output probability information.
+
+We present the output probability-based MCD extension of model uncertainty estimation for CTC-based ASR models. Given the input $x$ and the model $f$ , we decode the output sequence $\hat { y } ( x , \bar { f } )$ without Dropout. Then, we produce the multiple MCD output probabilities $f _ { i } ( x )$ for $i = 1 , . . . , N$ , where $f _ { i } ( \cdot )$ denotes the $i$ -th sampled model using Dropout and $N$ is the total number of Dropout implementations. We compute the confidences with respect to the decoded output sequence $\boldsymbol { \hat { y } } ( \boldsymbol { x } , f )$ for each MCD output $f _ { i } ( x )$ . This can be efficiently calculated by CTC probability modeling as $P _ { \mathrm { C T C } } ( \hat { y } ( x , \hat { f } ) | f _ { i } ( x ) )$ . Finally, we implement normalization by the sequence length and derive model uncertainty $u _ { m }$ of CTC-based ASR models as follows:
+
+$$
+u _ { m } ^ { i } ( x , f ) = - \frac { 1 } { | \hat { y } ( x , f ) | } \log P _ { \mathrm { C T C } } ( \hat { y } ( x , f ) | f _ { i } ( x ) ) ,
+$$
+
+$$
+u _ { m } ( x , f , N ) = \operatorname* { m a x } _ { i = 1 , 2 , \ldots , N } \{ u _ { m } ^ { i } ( x , f ) \} .
+$$
+
+In short, the worst estimated probability from the MCD implementations with respect to the decoded output sequence without Dropout is defined as model uncertainty while computing the output probability under CTC probability modeling.
+
+# 4.3 Uncertainty-Aware Self-Training
+
+In this section, we introduce the uncertainty-aware selftraining (UNCAST) framework based on the proposed uncertainty estimation method. UNCAST utilizes a novel uncertainty-aware loss function that considers two types of uncertainties, the teacher model’s uncertainty and the student model’s uncertainty, as illustrated in Figure 1. In the rest of this section, we provide a detailed explanation of UNCAST.
+
+Pseudo-label uncertainty. Pseudo-label uncertainty denotes the inherent uncertainty of the pseudo-labels. In selftraining, thus, the uncertainty of the teacher model is interpreted as pseudo-label uncertainty. Given the $N$ times Dropout implementations in the inference stage, we estimate pseudo-label uncertainty $u _ { \mathrm { p l } } ( x , f ^ { T } , N )$ of the input $x$ and the pseudo-label $\hat { y } ( x , f ^ { T } )$ predicted by the teacher model $f ^ { T }$ trained on labeled data as follows:
+
+$$
+\begin{array} { r } { u _ { \mathrm { p l } } ( x , f ^ { T } , N ) = u _ { d } ( x , f ^ { T } ) + u _ { m } ( x , f ^ { T } , N ) , } \end{array}
+$$
+
+which incorporates the proposed output probability-based sequence-level data uncertainty $u _ { d } ( x , \dot { f } ^ { T } )$ and model uncertainty $u _ { m } ( x , f ^ { T } , N )$ .
+
+We leverage pseudo-label uncertainty $u _ { \mathrm { p l } }$ for loss attenuation to minimize the negative effect of the uncertain pseudolabels in self-training, motivated by Kendall and Gal (2017). The attenuated loss function $\mathcal { L } _ { U } ^ { a t t }$ originating from the loss function $\mathcal { L } _ { U }$ of the unlabeled dataset $U$ is formulated as follows:
+
+$$
+\mathcal { L } _ { U } ^ { a t t } = \frac { 1 } { | U | } \sum _ { x _ { u } \in U } \frac { 1 } { u _ { \sf p l } ( x _ { u } , f ^ { T } , N ) } \mathcal { L } ( x _ { u } , \hat { y } ( x _ { u } , f ^ { T } ) , f ^ { S } ) .
+$$
+
+We aim to strengthen the training effect of the certainly pseudo-labeled data samples, i.e., data samples with low pseudo-label uncertainty $u _ { \mathrm { p l } }$ , and weaken the training effect of the uncertain pseudo-labeled data samples, i.e., data samples with high pseudo-label uncertainty $u _ { \mathrm { p l } }$ , by reweighting the loss of each pseudo-labeled sample $\mathit { \Pi } _ { \hat { x } _ { u } } \in \mathit { \Pi } U$ . Unlike previous self-training methods for CTC-based ASR models (Khurana et al. 2021; Khurana, Laurent, and Glass 2022) that adopt hard 0-1 data selection for unlabeled data filtering, we present a soft loss attenuation function to fully exploit the information of estimated uncertainty as shown in Equation 10. A soft loss attenuation method is particularly advantageous for the proposed uncertainty estimation because our approach is based on the output probability-level uncertainty with fine-grained resolution compared to the text-based uncertainty estimation method. Detailed experimental analysis is introduced in Section 6.2. The loss function for the labeled dataset $ { \mathcal { L } } _ { L }$ does not require loss attenuation as illustrated in Figure 1 because the data samples in the labeled dataset are labeled with ground-truth transcriptions.
+
+In-training uncertainty. Herein, we concentrate on intraining uncertainty of the student model in the training stage. We propose the in-training uncertainty-aware loss function by directly including the uncertainty of the student model for a regularization term. The regularization term is formulated as model uncertainty of the student model normalized by its data uncertainty. Formally, the uncertaintyaware loss $\mathcal { L } _ { L } ^ { \prime }$ and $\mathcal { L } _ { U } ^ { \prime }$ based on data uncertainty $u _ { d } ( x , f ^ { \check { S } } )$
+
+and model uncertainty $u _ { m } ( x , f ^ { S } , N )$ of the student model is formulated as follows:
+
+$$
+\begin{array} { r } { \mathcal { L } _ { L } ^ { \prime } = \mathcal { L } _ { L } + \alpha \displaystyle \sum _ { x _ { l } \in L } \frac { u _ { m } ( x _ { l } , f ^ { S } , N ) } { \mathrm { s g } \left( u _ { d } ( x _ { l } , f ^ { S } ) \right) } , } \\ { \mathcal { L } _ { U } ^ { \prime } = \mathcal { L } _ { U } ^ { a t t } + \alpha \displaystyle \sum _ { x _ { u } \in U } \frac { u _ { m } ( x _ { u } , f ^ { S } , N ) } { \mathrm { s g } \left( u _ { d } ( x _ { u } , f ^ { S } ) \right) } , } \end{array}
+$$
+
+where $\operatorname { s g } ( \cdot )$ is a stop gradient operation and $\alpha$ is a hyperparameter that decides the strength of the in-training uncertainty minimization objective. Since our uncertainty metric is differentiable, the in-training uncertainty loss functions are directly added to the optimization objective.
+
+Interestingly, in-training uncertainty-aware loss can be interpreted as a variant of a consistency regularization-based semi-supervised learning method such as Mixmatch (Berthelot et al. 2019), RemixMatch (Berthelot et al. 2020), or FixMatch (Sohn et al. 2020) which enforces the outputs of the model are unchanged after the input perturbations. In this point of view, minimizing the proposed model uncertainty is referred to as consistency regularization in that the proposed model uncertainty measures the disagreement between the output with no perturbation and the outputs with Dropout for perturbation in addition to the input perturbation such as data augmentation. However, model uncertainty is also minimized where MCD outputs show a wrong but consistent transcription, which corresponds to confirmation bias in consistency regularization. To prevent this issue, we regulate the in-training uncertainty loss using the reliability of the prediction and approximate this using data uncertainty $u _ { d } ( \dot { x } , f ^ { S } )$ . Nonetheless, incorporating data uncertainty into the loss function’s denominator hinders the training process; therefore, we employ a stop gradient operation for data uncertainty at the proposed loss function.
+
+Training. Overall, the total loss function ${ \mathcal { L } } _ { \mathrm { U N C A S T } }$ of the proposed method, UNCAST, is formulated as follows:
+
+$$
+\mathcal { L } _ { \mathrm { U N C A S T } } = \mathcal { L } _ { L } ^ { \prime } + \lambda \mathcal { L } _ { U } ^ { \prime } ,
+$$
+
+where $\lambda$ is a hyperparameter balancing the labeled dataset loss and the unlabeled dataset loss.
+
+In summary, we propose the output probability-based sequence-level uncertainty estimation method including data uncertainty and model uncertainty. Based on this, we present uncertainty estimation for pseudo-label (teacher) uncertainty estimation and in-training (student) uncertainty estimation; we finally incorporate these uncertainty estimations and propose a novel self-training framework, UNCAST.
+
+# 5 Experiments
+
+Dataset. For semi-supervised learning, the LibriSpeech dataset (Panayotov et al. 2015) is considered to follow the previous ASR semi-supervised learning methods (Kahn, Lee, and Hannun 2020; Park et al. 2020; Xu et al. 2021; Kim et al. 2023; Li, Meng, and Sun 2023; Higuchi et al. 2023). For the labeled training dataset, the 100 hours LibriSpeech train-clean dataset (LS-100) is utilized. For the unlabeled training dataset, we consider two datasets: the 360 hours LibriSpeech train-clean dataset (LS-360) and the 500 hours LibriSpeech train-other dataset (LS-500).
+
+Table 1: WER on the LibriSpeech dev and test datasets. The seed model is trained only with the labeled LS-100 dataset. The oracle model is trained with the labeled LS-100 and LS-360 datasets. The baseline method (Noisy Student), the previous method (DUST), and the proposed uncertainty-aware self-training (UNCAST) method are trained with the labeled LS-100 dataset and the unlabeled LS-360 dataset. The baseline model is trained without a pseudo-label filtering process. We also experiment with the iterative self-training method by refining pseudo-labels of the unlabeled dataset.   
+
+<html><body><table><tr><td rowspan="2">U =LS-360 Method</td><td colspan="4">Iteration=1</td><td colspan="4">Iteration=2</td></tr><tr><td>dev-clean</td><td>dev-other</td><td>test-clean</td><td>test-other</td><td>dev-clean</td><td>dev-other</td><td>test-clean</td><td>test-other</td></tr><tr><td>Seed</td><td>5.25</td><td>11.90</td><td>5.26</td><td>11.95</td><td></td><td></td><td></td><td></td></tr><tr><td>Noisy Student</td><td>4.66</td><td>10.22</td><td>4.71</td><td>10.25</td><td>4.75</td><td>10.41</td><td>4.73</td><td>10.38</td></tr><tr><td>DUST</td><td>4.47</td><td>9.82</td><td>4.67</td><td>9.85</td><td>4.44</td><td>9.61</td><td>4.48</td><td>9.50</td></tr><tr><td>UNCAST (ours)</td><td>4.21</td><td>9.60</td><td>4.31</td><td>9.35</td><td>4.23</td><td>9.42</td><td>4.26</td><td>9.32</td></tr><tr><td>Oracle</td><td>3.32</td><td>8.86</td><td>3.60</td><td>8.73</td><td></td><td></td><td></td><td></td></tr></table></body></html>
+
+Table 2: WER on the LibriSpeech dev and test datasets. The seed model is trained only with the labeled LS-100 dataset. The oracle model is trained with the labeled LS-100 and LS-500 dataset. The baseline method (Noisy Student), the previous method (DUST), and the proposed uncertainty-aware self-training (UNCAST) method are trained with the labeled LS-100 dataset and the unlabeled LS-500 dataset. The baseline model is trained without a pseudo-label filtering process. We also experiment with an iterative self-training method by refining pseudo-labels of the unlabeled dataset.   
+
+<html><body><table><tr><td rowspan="3">U = LS-500 Method</td><td colspan="4">Iteration=1</td><td colspan="4">Iteration=2</td></tr><tr><td>dev-clean</td><td>dev-other</td><td>test-clean</td><td>test-other</td><td>dev-clean</td><td>dev-other</td><td>test-clean</td><td>test-other</td></tr><tr><td>Seed</td><td>5.25</td><td>11.90</td><td>5.26</td><td>11.95</td><td></td><td></td><td></td><td></td></tr><tr><td>Noisy Student</td><td>4.82</td><td>10.38</td><td>4.87</td><td>10.32</td><td>4.79</td><td>10.35</td><td>4.82</td><td>10.29</td></tr><tr><td>DUST</td><td>4.62</td><td>9.61</td><td>4.64</td><td>9.63</td><td>4.66</td><td>9.33</td><td>4.57</td><td>9.46</td></tr><tr><td>UNCAST (ours)</td><td>4.34</td><td>9.65</td><td>4.41</td><td>9.56</td><td>4.25</td><td>9.05</td><td>4.24</td><td>9.16</td></tr><tr><td>Oracle</td><td>3.30</td><td>7.73</td><td>3.36</td><td>7.61</td><td></td><td></td><td></td><td></td></tr></table></body></html>
+
+Implementation details. We utilize a 12-layer Transformer encoder-based end-to-end ASR model, WavLM ${ \mathrm { B a s e + } }$ (Chen et al. 2022), under the CTC framework. We use a learning rate of 3e-5 with the Adam optimizer (Kingma and Ba 2015) with $10 \%$ warmup stages out of 100 total epochs. Also, the model is frozen for $1 2 . 5 \%$ of the training except for a newly initialized linear CTC layer. A batch size of 128 and the CTC loss function is utilized for optimization. Following the original specifications, a character-level tokenizer is utilized. All of the results in this study are reproduced for a fair comparison.
+
+To stabilize UNCAST, we clip the uncertainty value $u _ { \mathrm { p l } }$ lower than $1 \%$ of the training dataset to stabilize the loss attenuation in Equation 10 and set $\lambda$ as the clipped criterion. This can be interpreted as a labeled data sample is regarded as important as the top $1 \%$ of the unlabeled dataset. For validation, we conduct a hyperparameter search for UNCAST based on the word error rates (WER) of the dev-clean dataset using the model trained on the labeled LS-100 dataset and the unlabeled LS-360 dataset. We set $N = 3$ for the number of Dropout implementations.
+
+Table 3: Ablation effects of the proposed method evaluated on WER $( \% )$ of the LibriSpeech dataset. All of the methods are trained on the labeled LS-100 dataset and the unlabeled LS-360 dataset.   
+
+<html><body><table><tr><td>Method</td><td>test-clean</td><td>test-other</td></tr><tr><td>UNCAST (ours)</td><td>4.31</td><td>9.34</td></tr><tr><td>- in-training uncertainty</td><td>4.36</td><td>9.43</td></tr><tr><td>- soft loss attenuation</td><td>4.47</td><td>9.80</td></tr><tr><td>- data uncertainty</td><td>4.52</td><td>9.84</td></tr></table></body></html>
+
+# 6 Results
+
+In this section, we present the experimental results of semisupervised learning in Section 6.1 and the experimental analysis of uncertainty estimation in Section 6.2.
+
+# 6.1 Semi-Supervised Learning
+
+Main results. Table 1 and 2 show the results of the semisupervised learning methods concerning the labeled LS100 dataset with the unlabeled LS-360 dataset or the unlabeled LS-500 dataset. We train our seed model on the labeled dataset, the LS-100 dataset. We experiment with Noisy Student models without unlabeled data filtering as our self-training baseline. For the oracle performance, we experiment on the LS-100 dataset with the transcribed LS
+
+Table 4: Scaling effects for soft loss attenuation of the proposed method. The models are evaluated on WER $( \% )$ of the LibriSpeech test datasets and trained on the labeled LS-100 dataset and the unlabeled LS-360 dataset.   
+
+<html><body><table><tr><td>Method</td><td>test-clean</td><td>test-other</td></tr><tr><td>w/linear-scale</td><td>4.34</td><td>9.51</td></tr><tr><td>w/ log-scale</td><td>4.36</td><td>9.43</td></tr></table></body></html>
+
+360 dataset or the LS-500 dataset, which is expected to show the upper bound of a performance. Our goal is to achieve the performance as close as the oracle models using semi-supervised learning. For the uncertainty-based selftraining baseline, DUST (Khurana et al. 2021; Dawalatabad et al. 2023), which utilizes pseudo-label filtering based on MCD with textual edit distance (MCD-ED), is implemented. The unlabeled data filtering threshold of DUST is selected among $\tau \in \{ 2 5 , 5 0 , 7 5 \}$ using the dev-clean dataset where $\tau$ denotes the percentage of unlabeled dataset filtering.
+
+As shown in Table 1 and 2, it is observed that the model trained without the filtering on self-training (Noisy Student) reduces WER of the test-other dataset from $1 1 . 9 5 \%$ to $1 0 . 2 5 \%$ and $1 0 . 3 2 \%$ for the two unlabeled datasets, LS-360 and LS-500, respectively, although the uncertainty-based methods, UNCAST and DUST, consistently show the outperforming performances. The proposed method, UNCAST, surpasses the other methods at every test-clean and test-other dataset including the seed, Noisy Student, and DUST models for both the unlabeled LS-360 dataset and the unlabeled LS-500 dataset cases. As an example, Table 1 shows that UNCAST achieves $9 . 3 5 \%$ WER on the test-other dataset, which surpasses the seed, Noisy Student, and DUST methods achieving WER of $1 1 . 9 5 \%$ , $1 0 . 2 5 \%$ , and $9 . 8 5 \%$ , respectively, where the LS-360 dataset is utilized for the unlabeled dataset. Overall, the results successfully confirm the usefulness of the proposed uncertainty estimation method and selftraining.
+
+Iterative self-training. We also explore the iterative selftraining in which the unlabeled data samples are re-labeled from the trained student model. Due to the computation complexity, we experiment with self-training for up to two iterations. For the second iteration, we re-initialize the student models following the previous methods (Khurana et al. 2021; Singh, Hou, and Wang 2023). UNCAST for the first and the second iteration achieves $9 . 3 5 \%$ and $9 . 3 2 \%$ WER for the test-other dataset, outperforming DUST which achieves $9 . 8 5 \%$ and $9 . 5 0 \%$ , as shown in Table 1. Contrary to this, the model trained without unlabeled dataset filtering (Noisy Student) even deteriorates ASR performance. The improvement is more drastic where the LS-500 dataset is utilized as the unlabeled dataset showing WER of $9 . 5 6 \%$ and $9 . 1 6 \%$ for the test-other dataset, compared to DUST which shows $9 . 6 3 \%$ and $9 . 4 6 \%$ for the test-other dataset, as shown in Table 2.
+
+We observe that applying the LS-360 dataset as the unlabeled dataset for the first iteration of UNCAST shows the surpassing performance compared to the LS-500 dataset although the LS-500 dataset is larger than the LS-360 dataset. Moreover, this also holds for the baseline methods. We believe that this is because the incorrect pseudo-labels of the LS-500 dataset hinder the model training since the LS-500 dataset is a relatively difficult dataset causing erroneous pseudo-labels. At the second iteration, however, the incorrect pseudo-labels are decreased; this is beneficial for the large unlabeled dataset such as the LS-500 dataset, thus resulting in drastic WER reduction from $9 . 5 6 \%$ to the $9 . 1 6 \%$ on the test-other dataset.
+
+![](images/9056f2f4937a1e11eb4b39770d29e4e9aeb736955684b49ded9d4104c1eb794d.jpg)  
+Figure 2: WER $( \% )$ with hyperparameter $\alpha . \alpha$ decides the degree of in-training uncertainty-based regularization for UNCAST. $\alpha ~ \in ~ \{ 0 . 1 , 0 . 2 , 0 . 3 \}$ is evaluated by the LibriSpeech test-clean and test-other datasets.
+
+Ablation study. We conduct an ablation study to analyze the effect of each component of the proposed method. As shown in Table 3, it is observed that all of the components contribute to the performance. Specifically, combining pseudo-label uncertainty and in-training uncertainty for self-training, i.e., UNCAST, achieves $4 . 3 1 \%$ WER on the test-clean dataset, which outperforms the pseudo-label uncertainty-only model achieving $4 . 3 6 \%$ WER. We observe that applying soft loss attenuation is crucial for UNCAST. Since the proposed uncertainty estimation method includes fine-grained information based on an output probability, soft loss attenuation might be advantageous compared to hard (0- 1) attenuation. Lastly, utilizing both model uncertainty and data uncertainty for pseudo-label uncertainty obtains $4 . 4 7 \%$ WER on the test-clean dataset, and the model attains $4 . 5 2 \%$ WER on the test-clean dataset without data uncertainty. Note that the simplest version of the proposed method without in-training uncertainty, soft loss attenuation, and data uncertainty even surpasses the DUST method which attains $4 . 6 7 \%$ WER on the test-clean dataset.
+
+Hyperparameter search. We experiment on the hyperparameter $\alpha \in \{ 0 . 1 , 0 . 2 , 0 . 3 \}$ for Equation 11, 12. $\alpha$ controls the contribution of the in-training uncertainty-based regularization term concerning the CTC-based loss functions. As shown in Figure 2, setting $\alpha$ low as 0.1 leads to the student model’s little concentration on uncertainty-aware training and thus results in decreased performances compared to $\alpha = 0 . 2$ . As opposed to this, $\alpha = 0 . 3$ starts to distract the training process of CTC loss showing a higher WER
+
+![](images/8f96f038a6866f48516866eb7add153edbe963632ae737c346d70125d21fe562.jpg)  
+Figure 3: Uncertainty estimation results for the LS-360 dataset with the seed model. MCD-ED and the proposed uncertainty estimation method are evaluated. The sorted data samples based on uncertainty are binned, and then WER $( \% )$ for each bin is evaluated.   
+Figure 4: Uncertainty estimation results of the LS-500 dataset with the seed model. MCD-ED and the proposed uncertainty estimation method are evaluated. The sorted data samples based on uncertainty are binned, and then WER $( \% )$ for each bin is evaluated.
+
+Method Method MCD-ED UNCAST 1 5 10 15 20 25 30 1 5 10 1520 2530 bin bin (a) MCD-ED test-other dataset (b) UNCAST test-other dataset than $\alpha = 0 . 2$ . However, for all $\alpha \in \{ 0 . 1 , 0 . 2 , 0 . 3 \}$ , UNCAST achieves the lowest WER by outperforming the baseline method and DUST for both the test-clean dataset and the test-other dataset; this shows stability and effectiveness of the proposed method. Following the results, we use $\alpha = 0 . 2$ for the other experiments.
+
+Design choice. Table 4 shows the experimental results of the scaling effect for soft loss attenuation of the proposed method. Following the CTC loss function which is based on negative log probability, the proposed method directly adopts the CTC loss function for soft loss attenuation as shown in Equation 6 and 7. We compare logarithmic scale-based and linear scale-based soft loss attenuation. As a result, we observe consistent performance improvements across both scaling methods, which supports the stability of the proposed method.
+
+# 6.2 Uncertainty Analysis
+
+We analyze the proposed uncertainty estimation method in terms of the predictability of the performance. Since we focus on ASR, WER is utilized to present the performance of the output prediction in the analysis. We utilize the seed model which is trained on the labeled LS-100 dataset to estimate uncertainty of the two unlabeled datasets, LS-360 and LS-500. First of all, the seed model predicts the transcription of the given input, and MCD-ED or the proposed uncertainty estimation method estimate uncertainty of each predicted transcription. Then, we sort the data samples using the estimated uncertainty of each sample. Since uncertainty is believed to estimate the quality of the prediction, low uncertainty should indicate low WER. To quantify this, we utilize binning on the sorted samples, followed by measuring WER within each bin. We use 70 bins for experiments. As shown in Figure 3 and 4, the proposed uncertainty estimation method shows aligned WER along with the order of bins for both the LS-360 and LS-500 datasets. However, MCDED outputs zero uncertainty until the 21st bin for the LS360 dataset and the 14th bin for the LS-500 dataset, resulting in the same WER across those bins. Since the MCD-ED method is based on textual edit distance, MCD-ED is relatively coarse-grained. On the contrary, the proposed method shows fine-grained uncertainty estimation results because it is based on output probability which includes rich information. The fine-granularity of the proposed method is particularly advantageous for soft loss attenuation of UNCAST as shown in Table 3 because estimated uncertainties of pseudolabels are directly applied to re-weight the loss function.
+
+In addition, the proposed uncertainty estimation method is differentiable so that the estimated uncertainty of the student model (i.e., in-training uncertainty) is optimized instantly by being utilized for the loss function. In short, the proposed uncertainty estimation method is fine-grained and differentiable, which is useful for self-training in that the estimated uncertainty can be directly and effectively applied to the loss function of self-training.
+
+# 7 Conclusion
+
+We propose a sequence-level uncertainty estimation method for CTC-based ASR models based on the output probability. We consider data uncertainty and model uncertainty simultaneously, which is the first attempt for CTC-based ASR models to the best of our knowledge. Also, we categorize teacher uncertainty and student uncertainty and incorporate these into the uncertainty-aware self-training framework. We experimentally verify the effectiveness of the proposed method for ASR semi-supervised learning. Future work can analyze the disentanglement of data uncertainty and model uncertainty or applicability for other sequence prediction tasks such as text recognition.
